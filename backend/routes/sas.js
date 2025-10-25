@@ -2,20 +2,8 @@ import express from "express";
 import multer from "multer";
 import Capsule from "../models/Capsule.js";
 import { uploadBuffer, getSignedUrl } from "../services/azureBlob.js";
-
-const router = express.Router();
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 200 * 1024 * 1024 },
-});
-
-// simple token middleware (replace with your real one)
-function requireToken(req, res, next) {
-  const token = req.header("x-api-token") || req.query.token;
-  if (token !== process.env.SINGLE_USER_TOKEN)
-    return res.status(401).json({ error: "Unauthorized" });
-  next();
-}
+import { configDotenv } from "dotenv";
+configDotenv();
 
 import {
   BlobServiceClient,
@@ -24,22 +12,44 @@ import {
   BlobSASPermissions,
 } from "@azure/storage-blob";
 
-const accountName = process.env.AZURE_STORAGE_ACCOUNT;
-const accountKey = process.env.AZURE_STORAGE_KEY;
-const containerName = process.env.AZURE_CONTAINER_NAME || "capsules";
+const router = express.Router();
 
+// Multer memory upload
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 200 * 1024 * 1024 }, // 200 MB
+});
+
+// Simple token auth middleware
+function requireToken(req, res, next) {
+  const token = req.header("x-api-token") || req.query.token;
+  if (token !== process.env.SINGLE_USER_TOKEN)
+    return res.status(401).json({ error: "Unauthorized" });
+  next();
+}
+
+// Use the conncectio string
+const connectionString = process.env.AZURE_STORAGE_CONNECTION_STRING;
+if (!connectionString) {
+  throw new Error("AZURE_STORAGE_CONNECTION_STRING missing in .env");
+}
+
+const containerName = process.env.AZURE_CONTAINER_NAME || "capsules";
+const blobServiceClient =
+  BlobServiceClient.fromConnectionString(connectionString);
+const containerClient = blobServiceClient.getContainerClient(containerName);
+
+// Helper: extract accountName + accountKey for SAS generation
+const match = connectionString.match(/AccountName=(.*?);AccountKey=(.*?);/);
+if (!match) throw new Error("Invalid Azure Storage connection string format");
+const [_, accountName, accountKey] = match;
 const sharedKeyCredential = new StorageSharedKeyCredential(
   accountName,
   accountKey,
 );
-const blobServiceClient = new BlobServiceClient(
-  `https://${accountName}.blob.core.windows.net`,
-  sharedKeyCredential,
-);
 
 /**
- * POST /api/capsules
- * JSON flow (SAS)
+ * POST /api/capsules (JSON flow)
  */
 router.post("/", requireToken, express.json(), async (req, res) => {
   try {
@@ -53,27 +63,23 @@ router.post("/", requireToken, express.json(), async (req, res) => {
       visibility,
     } = req.body;
 
-    if (!createdBy) {
+    if (!createdBy)
       return res.status(400).json({ error: "createdBy is required" });
-    }
-
-    if (!Array.isArray(blobs) || blobs.length === 0) {
+    if (!Array.isArray(blobs) || blobs.length === 0)
       return res.status(400).json({ error: "blobs array required" });
-    }
 
-    // validate blobs entries
-    const savedFiles = [];
-    for (const b of blobs) {
-      if (!b || typeof b.blobName !== "string") continue;
-      if (!/^\d+_.+/.test(b.blobName)) continue;
-      savedFiles.push({
+    const savedFiles = blobs
+      .filter(
+        (b) =>
+          b && typeof b.blobName === "string" && /^\d+_.+/.test(b.blobName),
+      )
+      .map((b) => ({
         originalName:
           b.originalName || b.blobName.split("_").slice(1).join("_"),
         blobName: b.blobName,
         contentType: b.contentType || "application/octet-stream",
         size: b.size || 0,
-      });
-    }
+      }));
 
     if (!savedFiles.length)
       return res.status(400).json({ error: "No valid blobs provided" });
@@ -98,8 +104,7 @@ router.post("/", requireToken, express.json(), async (req, res) => {
 });
 
 /**
- * POST /api/capsules/upload
- * multipart/form-data with files
+ * POST /api/capsules/upload (multipart/form-data)
  */
 router.post(
   "/upload",
@@ -116,10 +121,8 @@ router.post(
         visibility,
       } = req.body;
 
-      if (!createdBy) {
+      if (!createdBy)
         return res.status(400).json({ error: "createdBy is required" });
-      }
-
       if (!req.files || !req.files.length)
         return res.status(400).json({ error: "No files uploaded" });
 
@@ -157,33 +160,27 @@ router.post(
 
 /**
  * POST /api/get-sas
- * Request body: { blobName: "123_file.pdf", permissions: "rwd", expiresInSeconds: 900 }
- * Returns: { sasUrl }
+ * Body: { blobName, permissions?, expiresInSeconds? }
  */
 router.post("/get-sas", requireToken, express.json(), async (req, res) => {
   try {
-    const { blobName, permissions = "rwd", expiresInSeconds = 900 } = req.body;
-
+    const { blobName, permissions = "r", expiresInSeconds = 900 } = req.body;
     if (!blobName)
       return res.status(400).json({ error: "blobName is required" });
 
-    // Compute expiry time
-    const expiryDate = new Date(new Date().valueOf() + expiresInSeconds * 1000);
-
-    // Generate SAS token
+    const expiresOn = new Date(Date.now() + expiresInSeconds * 1000);
     const sasToken = generateBlobSASQueryParameters(
       {
         containerName,
         blobName,
-        permissions: BlobSASPermissions.parse(permissions), // e.g., "rwd"
-        expiresOn: expiryDate,
+        permissions: BlobSASPermissions.parse(permissions),
+        expiresOn,
       },
       sharedKeyCredential,
     ).toString();
 
     const sasUrl = `https://${accountName}.blob.core.windows.net/${containerName}/${blobName}?${sasToken}`;
-
-    res.json({ sasUrl, expiresOn: expiryDate });
+    res.json({ sasUrl, expiresOn });
   } catch (err) {
     console.error("Generate SAS error", err);
     res.status(500).json({ error: "Failed to generate SAS" });
@@ -191,7 +188,7 @@ router.post("/get-sas", requireToken, express.json(), async (req, res) => {
 });
 
 /**
- * GET /api/capsules  (list metadata)
+ * GET /api/capsules (list)
  */
 router.get("/", requireToken, async (req, res) => {
   try {
@@ -204,12 +201,13 @@ router.get("/", requireToken, async (req, res) => {
 });
 
 /**
- * GET /api/capsules/:id  (get signed URLs if unlocked)
+ * GET /api/capsules/:id (details + signed URLs)
  */
 router.get("/:id", requireToken, async (req, res) => {
   try {
     const cap = await Capsule.findById(req.params.id).lean();
     if (!cap) return res.status(404).json({ error: "Not found" });
+
     if (new Date(cap.unlockDate) > new Date()) {
       return res.json({ unlocked: false, unlockDate: cap.unlockDate });
     }
@@ -226,13 +224,8 @@ router.get("/:id", requireToken, async (req, res) => {
 
     res.json({
       unlocked: true,
-      id: cap._id,
-      title: cap.title,
-      description: cap.description,
+      ...cap,
       files: signedFiles,
-      createdBy: cap.createdBy,
-      recepients: cap.recepients,
-      visibility: cap.visibility,
     });
   } catch (err) {
     console.error("Get capsule error", err);
