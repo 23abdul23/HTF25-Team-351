@@ -13,6 +13,10 @@ app.use(cors());
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
+//route opened to allow direct frontend file transfer
+import sasRoutes from "./routes/sas.js";
+app.use("/api/sas", sasRoutes);
+
 // Routes
 app.use("/api/auth", auth);
 
