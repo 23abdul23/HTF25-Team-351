@@ -1,7 +1,12 @@
 import { useState } from "react";
+import axios from "axios";
+
+const API_BASE = import.meta.env.NEXT_BACKEND_URL || "http://localhost:5000";
 
 const UploadFiles = () => {
   const [files, setFiles] = useState<File[]>([]);
+
+  const [description, setDescription] = useState("");
   const [title, setTitle] = useState("");
   const [unlockDate, setUnlockDate] = useState("");
   const [status, setStatus] = useState("");
@@ -18,21 +23,18 @@ const UploadFiles = () => {
     files.forEach((f) => formData.append("files", f));
     if (title) formData.append("title", title);
     if (unlockDate) formData.append("unlockDate", unlockDate);
+    if (description) formData.append("description", description);
 
     try {
-      const res = await fetch(`${process.env.VITE_PUBLIC_BACKEND_URL}/api/capsules/upload`, {
-        method: "POST",
-        headers: {
-          "x-api-token": "",
-        },
-        body: formData,
-      });
+      const res = await axios.post(
+        `${API_BASE}/api/capsules/upload`,
+        formData,
+      );
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Upload failed");
+      const data = res.data;
       setStatus(`Upload successful! Capsule ID: ${data.id}`);
     } catch (err: any) {
-      setStatus(`jit trippin - ${err.message}`);
+      setStatus(`Upload failed: ${err?.response?.data?.error || err.message}`);
     }
   };
 
@@ -41,6 +43,7 @@ const UploadFiles = () => {
       <h1>Upload files to your capsule!</h1>
       <form onSubmit={handleSubmit}>
         <input type="text" placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} /><br/>
+        <input type="text" placeholder="Description" value={description} onChange={(e) => setDescription(e.target.value)} /><br/>
         <input type="datetime-local" placeholder="Unlock Date" value={unlockDate} onChange={(e) => setUnlockDate(e.target.value)} /><br/>
         <input type="file" multiple onChange={handleFileChange} /><br/>
         <button type="submit">Upload</button>

@@ -1,6 +1,5 @@
-
 import React, { useEffect, useState } from 'react'
-import './App.css'
+import '../App.css'
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000'
 
 type User = { id: string; email: string; name?: string; avatarUrl?: string }
@@ -11,11 +10,20 @@ async function api(path: string, init?: RequestInit) {
     headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
     credentials: 'include',
   })
-  if (!res.ok) throw new Error((await res.json()).error || 'Request failed')
-  return res.json()
+
+  // safe JSON parse
+  let body: any = null
+  try {
+    body = await res.json()
+  } catch {
+    /* ignore parse errors */
+  }
+
+  if (!res.ok) throw new Error(body?.error || 'Request failed')
+  return body
 }
 
-export function App() {
+export function LoginPage() {
   const [user, setUser] = useState<User | null>(null)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -51,7 +59,11 @@ export function App() {
   }
 
   async function handleLogout() {
-    await api('/auth/logout', { method: 'POST' })
+    try {
+      await api('/auth/logout', { method: 'POST' })
+    } catch {
+      // ignore
+    }
     setUser(null)
   }
 
@@ -100,7 +112,7 @@ export function App() {
               </label>
               <label className="field">
                 <span>Password</span>
-                <input placeholder="ΓÇóΓÇóΓÇóΓÇóΓÇóΓÇóΓÇóΓÇó" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+                <input placeholder="••••••••" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
               </label>
               <label className="field">
                 <span>Call sign (optional)</span>
@@ -130,4 +142,4 @@ export function App() {
   )
 }
 
-export default LoginPage;
+export default LoginPage

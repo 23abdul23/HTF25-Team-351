@@ -94,6 +94,8 @@ router.post(
         unlockDate: unlockDate ? new Date(unlockDate) : new Date(),
       });
 
+      console.log("Capsule created with uploaded files:", capsule._id);
+
       res.json({ ok: true, id: capsule._id });
     } catch (err) {
       console.error("Create capsule (multipart) error", err);
