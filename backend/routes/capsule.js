@@ -178,10 +178,30 @@ router.get("/", requireToken, async (req, res) => {
       .sort({ createdAt: -1 })
       .lean();
 
-    res.json(items);
+
+    // For each capsule, attach fileUrl to each file using getFilesUrls
+    const itemsWithFileUrls = await Promise.all(
+      items.map(async (item) => {
+        const files = item.files || [];
+        const filesWithUrl = await Promise.all(
+          files.map(async (f) => {
+            try {
+              const url = await getFilesUrls(f.blobName);
+              return { ...f, fileUrl: url };
+            } catch (err) {
+              console.error("Failed to get URL for blob:", f.blobName, err);
+              return { ...f, fileUrl: null };
+            }
+          })
+        );
+        return { ...item, files: filesWithUrl };
+      })
+    );
+
+    res.status(200).json({ data: itemsWithFileUrls });
   } catch (err) {
-    console.error("List capsules error", err);
-    res.status(500).json({ error: "Failed to fetch capsules" });
+    console.error("List capsules error:", err);
+    res.status(500).json({ error: "Failed to list capsules" });
   }
 });
 
