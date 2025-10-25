@@ -1,42 +1,250 @@
-#root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+:root {
+  color-scheme: dark;
+  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background-color: #050714;
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
+* {
+  box-sizing: border-box;
 }
 
-@keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: #f5f6ff;
+  background: radial-gradient(circle at 20% 20%, rgba(64, 120, 255, 0.2), transparent 45%),
+    radial-gradient(circle at 80% 0%, rgba(255, 102, 196, 0.18), transparent 55%),
+    radial-gradient(circle at 50% 100%, rgba(86, 193, 255, 0.24), transparent 60%),
+    #050714;
+  background-attachment: fixed;
+}
+
+.app-shell {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 16px;
+  overflow: hidden;
+}
+
+.stars {
+  position: fixed;
+  inset: 0;
+  background-image: radial-gradient(1px 1px at 20px 40px, rgba(255, 255, 255, 0.5), transparent),
+    radial-gradient(1px 1px at 80px 120px, rgba(255, 255, 255, 0.3), transparent),
+    radial-gradient(1px 1px at 160px 200px, rgba(255, 255, 255, 0.4), transparent),
+    radial-gradient(1px 1px at 240px 320px, rgba(255, 255, 255, 0.35), transparent);
+  background-size: 200px 200px;
+  opacity: 0.35;
+  animation: twinkle 8s linear infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.aurora {
+  position: fixed;
+  inset: -40% -20%;
+  background: radial-gradient(circle at 30% 30%, rgba(90, 197, 255, 0.12), transparent 55%),
+    radial-gradient(circle at 70% 60%, rgba(255, 120, 230, 0.16), transparent 60%);
+  filter: blur(80px);
+  opacity: 0.9;
+  animation: drift 18s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.auth-card {
+  position: relative;
+  width: min(420px, 100%);
+  padding: 36px;
+  border-radius: 24px;
+  border: 1px solid rgba(146, 203, 255, 0.15);
+  background: linear-gradient(160deg, rgba(9, 15, 35, 0.9), rgba(14, 22, 50, 0.92));
+  box-shadow: 0 24px 70px rgba(5, 7, 20, 0.65);
+  backdrop-filter: blur(14px);
+  z-index: 1;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 0.74rem;
+  color: rgba(157, 192, 255, 0.7);
+  margin: 0;
+}
+
+.headline {
+  font-size: 1.9rem;
+  margin: 0;
+  color: #e9f1ff;
+}
+
+.subhead {
+  margin: 0;
+  color: rgba(233, 241, 255, 0.75);
+  font-size: 1rem;
+}
+
+.copy {
+  margin: 6px 0 0;
+  color: rgba(199, 216, 255, 0.7);
+  font-size: 0.95rem;
+}
+
+.error {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(255, 92, 132, 0.14);
+  color: #ffb1c9;
+  font-size: 0.9rem;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: rgba(202, 216, 255, 0.85);
+}
+
+.field input {
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(130, 173, 255, 0.28);
+  background: rgba(9, 14, 33, 0.9);
+  color: #f5f6ff;
+  font-size: 0.95rem;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.field input::placeholder {
+  color: rgba(183, 205, 255, 0.45);
+}
+
+.field input:focus {
+  outline: none;
+  border-color: rgba(122, 196, 255, 0.65);
+  box-shadow: 0 0 0 3px rgba(86, 167, 255, 0.28);
+}
+
+.actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+button {
+  font-family: inherit;
+  font-size: 0.95rem;
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+.primary {
+  background: linear-gradient(135deg, #4f9bff, #6f7dff);
+  color: #0b0f24;
+  font-weight: 600;
+  box-shadow: 0 12px 30px rgba(79, 155, 255, 0.35);
+}
+
+.primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 36px rgba(79, 155, 255, 0.45);
+}
+
+.secondary {
+  background: rgba(9, 14, 33, 0.85);
+  color: #c9d8ff;
+  border: 1px solid rgba(130, 173, 255, 0.38);
+}
+
+.secondary:hover {
+  background: rgba(19, 27, 56, 0.9);
+  transform: translateY(-2px);
+}
+
+.ghost {
+  background: transparent;
+  color: rgba(196, 209, 255, 0.85);
+  border: 1px solid rgba(130, 173, 255, 0.3);
+}
+
+.ghost:hover {
+  background: rgba(18, 27, 48, 0.6);
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: rgba(171, 194, 255, 0.5);
+  font-size: 0.85rem;
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(130, 173, 255, 0.35), transparent);
+}
+
+.avatar {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid rgba(130, 173, 255, 0.45);
+}
+
+@keyframes twinkle {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
   }
-  to {
-    transform: rotate(360deg);
+  50% {
+    opacity: 0.55;
+    transform: translateY(-4px);
   }
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
+@keyframes drift {
+  0%,
+  100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-40px) rotate(3deg);
   }
 }
 
-.card {
-  padding: 2em;
-}
+@media (max-width: 480px) {
+  .auth-card {
+    padding: 28px 24px;
+    border-radius: 20px;
+  }
 
-.read-the-docs {
-  color: #888;
+  .headline {
+    font-size: 1.6rem;
+  }
 }
