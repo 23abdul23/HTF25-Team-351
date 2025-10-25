@@ -1,4 +1,4 @@
-import showFiles from "components/ShowFiles"
+import ShowFiles from "./components/ShowFiles"
 import './App.css'
 
 function App() {
@@ -9,7 +9,7 @@ function App() {
 		<ShowFiles />
 
     	</div>
-
+	is this thing working?
     </>
   )
 }
