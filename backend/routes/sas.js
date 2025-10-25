@@ -17,13 +17,46 @@ function requireToken(req, res, next) {
   next();
 }
 
+import {
+  BlobServiceClient,
+  StorageSharedKeyCredential,
+  generateBlobSASQueryParameters,
+  BlobSASPermissions,
+} from "@azure/storage-blob";
+
+const accountName = process.env.AZURE_STORAGE_ACCOUNT;
+const accountKey = process.env.AZURE_STORAGE_KEY;
+const containerName = process.env.AZURE_CONTAINER_NAME || "capsules";
+
+const sharedKeyCredential = new StorageSharedKeyCredential(
+  accountName,
+  accountKey,
+);
+const blobServiceClient = new BlobServiceClient(
+  `https://${accountName}.blob.core.windows.net`,
+  sharedKeyCredential,
+);
+
 /**
  * POST /api/capsules
- * JSON flow (SAS): { title, description, unlockDate, blobs: [{ blobName, originalName, contentType, size }] }
+ * JSON flow (SAS)
  */
 router.post("/", requireToken, express.json(), async (req, res) => {
   try {
-    const { title, description, unlockDate, blobs } = req.body;
+    const {
+      title,
+      description,
+      unlockDate,
+      blobs,
+      createdBy,
+      recepients,
+      visibility,
+    } = req.body;
+
+    if (!createdBy) {
+      return res.status(400).json({ error: "createdBy is required" });
+    }
+
     if (!Array.isArray(blobs) || blobs.length === 0) {
       return res.status(400).json({ error: "blobs array required" });
     }
@@ -32,7 +65,6 @@ router.post("/", requireToken, express.json(), async (req, res) => {
     const savedFiles = [];
     for (const b of blobs) {
       if (!b || typeof b.blobName !== "string") continue;
-      // ensure blobName matches our naming convention: /^\d+_.+/
       if (!/^\d+_.+/.test(b.blobName)) continue;
       savedFiles.push({
         originalName:
@@ -49,6 +81,11 @@ router.post("/", requireToken, express.json(), async (req, res) => {
     const capsule = await Capsule.create({
       title: title || savedFiles.map((s) => s.originalName).join(", "),
       description,
+      createdBy,
+      recepients: Array.isArray(recepients) ? recepients : [],
+      visibility: ["private", "public", "shared"].includes(visibility)
+        ? visibility
+        : "private",
       files: savedFiles,
       unlockDate: unlockDate ? new Date(unlockDate) : new Date(),
     });
@@ -62,7 +99,7 @@ router.post("/", requireToken, express.json(), async (req, res) => {
 
 /**
  * POST /api/capsules/upload
- * multipart/form-data with files -> server uploads to Azure and stores metadata
+ * multipart/form-data with files
  */
 router.post(
   "/upload",
@@ -70,7 +107,19 @@ router.post(
   upload.array("files", 20),
   async (req, res) => {
     try {
-      const { title, description, unlockDate } = req.body;
+      const {
+        title,
+        description,
+        unlockDate,
+        createdBy,
+        recepients,
+        visibility,
+      } = req.body;
+
+      if (!createdBy) {
+        return res.status(400).json({ error: "createdBy is required" });
+      }
+
       if (!req.files || !req.files.length)
         return res.status(400).json({ error: "No files uploaded" });
 
@@ -89,6 +138,11 @@ router.post(
       const capsule = await Capsule.create({
         title: title || savedFiles.map((s) => s.originalName).join(", "),
         description,
+        createdBy,
+        recepients: Array.isArray(recepients) ? recepients : [],
+        visibility: ["private", "public", "shared"].includes(visibility)
+          ? visibility
+          : "private",
         files: savedFiles,
         unlockDate: unlockDate ? new Date(unlockDate) : new Date(),
       });
@@ -100,6 +154,41 @@ router.post(
     }
   },
 );
+
+/**
+ * POST /api/get-sas
+ * Request body: { blobName: "123_file.pdf", permissions: "rwd", expiresInSeconds: 900 }
+ * Returns: { sasUrl }
+ */
+router.post("/get-sas", requireToken, express.json(), async (req, res) => {
+  try {
+    const { blobName, permissions = "rwd", expiresInSeconds = 900 } = req.body;
+
+    if (!blobName)
+      return res.status(400).json({ error: "blobName is required" });
+
+    // Compute expiry time
+    const expiryDate = new Date(new Date().valueOf() + expiresInSeconds * 1000);
+
+    // Generate SAS token
+    const sasToken = generateBlobSASQueryParameters(
+      {
+        containerName,
+        blobName,
+        permissions: BlobSASPermissions.parse(permissions), // e.g., "rwd"
+        expiresOn: expiryDate,
+      },
+      sharedKeyCredential,
+    ).toString();
+
+    const sasUrl = `https://${accountName}.blob.core.windows.net/${containerName}/${blobName}?${sasToken}`;
+
+    res.json({ sasUrl, expiresOn: expiryDate });
+  } catch (err) {
+    console.error("Generate SAS error", err);
+    res.status(500).json({ error: "Failed to generate SAS" });
+  }
+});
 
 /**
  * GET /api/capsules  (list metadata)
@@ -129,10 +218,10 @@ router.get("/:id", requireToken, async (req, res) => {
       cap.files.map(async (f) => {
         const url = await getSignedUrl(
           f.blobName,
-          parseInt(process.env.SIGNED_URL_EXP_SECONDS || "900", 10)
+          parseInt(process.env.SIGNED_URL_EXP_SECONDS || "900", 10),
         );
         return { ...f, signedUrl: url };
-      })
+      }),
     );
 
     res.json({
@@ -141,6 +230,9 @@ router.get("/:id", requireToken, async (req, res) => {
       title: cap.title,
       description: cap.description,
       files: signedFiles,
+      createdBy: cap.createdBy,
+      recepients: cap.recepients,
+      visibility: cap.visibility,
     });
   } catch (err) {
     console.error("Get capsule error", err);
