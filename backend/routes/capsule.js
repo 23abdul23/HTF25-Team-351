@@ -138,4 +138,4 @@ router.get("/:id", requireToken, async (req, res) => {
   });
 });
 
-module.eports = router;
+export default router;
