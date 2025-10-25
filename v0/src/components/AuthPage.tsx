@@ -10,35 +10,81 @@ interface AuthPageProps {
   onAuthenticated: () => void;
 }
 
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
+
+async function api(path: string, init?: RequestInit) {
+  const res = await fetch(`${API_BASE}/api${path}`, {
+    ...init,
+    headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
+    credentials: 'include',
+  });
+
+  let body: any = null;
+  try {
+    body = await res.json();
+  } catch {
+    /* ignore parse errors */
+  }
+
+  if (!res.ok) throw new Error(body?.error || 'Request failed');
+  return body;
+}
+
 export function AuthPage({ onAuthenticated }: AuthPageProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [accessGranted, setAccessGranted] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // login/register fields & error
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [pilotName, setPilotName] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
+    setError(null);
     setIsLoading(true);
-    
-    // Simulate authentication
-    setTimeout(() => {
+    try {
+      await api('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+      });
       setAccessGranted(true);
       setTimeout(() => {
         onAuthenticated();
-      }, 2000);
-    }, 1500);
-  };
+      }, 600);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function handleRegister(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setIsLoading(true);
+    try {
+      await api('/auth/register', {
+        method: 'POST',
+        body: JSON.stringify({ email, password, name: pilotName }),
+      });
+      setAccessGranted(true);
+      setTimeout(() => {
+        onAuthenticated();
+      }, 600);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  }
 
   if (accessGranted) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <motion.div
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          className="text-center"
-        >
-          <motion.div
-            animate={{ rotate: 360 }}
-            transition={{ duration: 1, ease: "easeInOut" }}
-          >
+        <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className="text-center">
+          <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, ease: 'easeInOut' }}>
             <CheckCircle className="w-32 h-32 text-green-400 mx-auto mb-4 neon-cyan" />
           </motion.div>
           <h2 className="text-4xl text-green-400 mb-2">ACCESS GRANTED</h2>
@@ -50,11 +96,7 @@ export function AuthPage({ onAuthenticated }: AuthPageProps) {
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 relative overflow-hidden">
-      <motion.div
-        initial={{ opacity: 0, y: 30 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md"
-      >
+      <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md">
         {/* Console header */}
         <div className="glass p-6 rounded-t-xl border-b border-cyan-400/30">
           <div className="flex items-center justify-between mb-4">
@@ -65,7 +107,7 @@ export function AuthPage({ onAuthenticated }: AuthPageProps) {
             </div>
             <p className="text-cyan-400 text-sm font-mono">SYS.AUTH.v2.4</p>
           </div>
-          
+
           <div className="flex items-center gap-3">
             <div className="p-3 glass rounded-lg neon-cyan">
               <Rocket className="w-8 h-8 text-cyan-400" />
@@ -90,7 +132,8 @@ export function AuthPage({ onAuthenticated }: AuthPageProps) {
             </TabsList>
 
             <TabsContent value="login">
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <form onSubmit={handleLogin} className="space-y-4">
+                {error && <p className="text-red-400 text-sm">{error}</p>}
                 <div className="space-y-2">
                   <Label htmlFor="email" className="text-cyan-300">Email Address</Label>
                   <div className="relative">
@@ -101,6 +144,8 @@ export function AuthPage({ onAuthenticated }: AuthPageProps) {
                       placeholder="pilot@timecapsule.space"
                       className="pl-10 glass border-cyan-400/30 text-cyan-100 placeholder:text-cyan-400/30"
                       required
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
                     />
                   </div>
                 </div>
@@ -115,6 +160,8 @@ export function AuthPage({ onAuthenticated }: AuthPageProps) {
                       placeholder="••••••••"
                       className="pl-10 glass border-cyan-400/30 text-cyan-100 placeholder:text-cyan-400/30"
                       required
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
                     />
                   </div>
                 </div>
@@ -126,11 +173,7 @@ export function AuthPage({ onAuthenticated }: AuthPageProps) {
                 >
                   {isLoading ? (
                     <>
-                      <motion.div
-                        animate={{ rotate: 360 }}
-                        transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                        className="w-5 h-5 border-2 border-white border-t-transparent rounded-full mr-2"
-                      />
+                      <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-5 h-5 border-2 border-white border-t-transparent rounded-full mr-2" />
                       Authenticating...
                     </>
                   ) : (
@@ -144,7 +187,8 @@ export function AuthPage({ onAuthenticated }: AuthPageProps) {
             </TabsContent>
 
             <TabsContent value="signup">
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <form onSubmit={handleRegister} className="space-y-4">
+                {error && <p className="text-red-400 text-sm">{error}</p>}
                 <div className="space-y-2">
                   <Label htmlFor="pilot-name" className="text-purple-300">Pilot Name</Label>
                   <div className="relative">
@@ -155,6 +199,8 @@ export function AuthPage({ onAuthenticated }: AuthPageProps) {
                       placeholder="Captain Timeline"
                       className="pl-10 glass border-purple-400/30 text-purple-100 placeholder:text-purple-400/30"
                       required
+                      value={pilotName}
+                      onChange={(e) => setPilotName(e.target.value)}
                     />
                   </div>
                 </div>
@@ -169,6 +215,8 @@ export function AuthPage({ onAuthenticated }: AuthPageProps) {
                       placeholder="pilot@timecapsule.space"
                       className="pl-10 glass border-purple-400/30 text-purple-100 placeholder:text-purple-400/30"
                       required
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
                     />
                   </div>
                 </div>
@@ -183,6 +231,8 @@ export function AuthPage({ onAuthenticated }: AuthPageProps) {
                       placeholder="••••••••"
                       className="pl-10 glass border-purple-400/30 text-purple-100 placeholder:text-purple-400/30"
                       required
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
                     />
                   </div>
                 </div>
@@ -194,11 +244,7 @@ export function AuthPage({ onAuthenticated }: AuthPageProps) {
                 >
                   {isLoading ? (
                     <>
-                      <motion.div
-                        animate={{ rotate: 360 }}
-                        transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                        className="w-5 h-5 border-2 border-white border-t-transparent rounded-full mr-2"
-                      />
+                      <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-5 h-5 border-2 border-white border-t-transparent rounded-full mr-2" />
                       Creating Account...
                     </>
                   ) : (
