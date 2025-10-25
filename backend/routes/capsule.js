@@ -1,7 +1,7 @@
 import express from "express";
 import multer from "multer";
 import Capsule from "../models/Capsule.js";
-import { uploadBuffer, getSignedUrl } from "../services/azureBlob.js";
+import { uploadBuffer, getSignedUrl, getFilesUrls } from "../services/azureBlob.js";
 
 const router = express.Router();
 const upload = multer({
@@ -108,10 +108,34 @@ router.post(
  * GET /api/capsules  (list metadata)
  */
 router.get("/", requireToken, async (req, res) => {
-  console.log("Listing all capsules metadata...");
-  const items = await Capsule.find().sort({ createdAt: -1 }).lean();
+  try {
+    console.log("Listing all capsules metadata...");
+    const items = await Capsule.find().sort({ createdAt: -1 }).lean();
 
-  res.status(200).json({ data: items });
+    // For each capsule, attach fileUrl to each file using getFilesUrls
+    const itemsWithFileUrls = await Promise.all(
+      items.map(async (item) => {
+        const files = item.files || [];
+        const filesWithUrl = await Promise.all(
+          files.map(async (f) => {
+            try {
+              const url = await getFilesUrls(f.blobName);
+              return { ...f, fileUrl: url };
+            } catch (err) {
+              console.error("Failed to get URL for blob:", f.blobName, err);
+              return { ...f, fileUrl: null };
+            }
+          })
+        );
+        return { ...item, files: filesWithUrl };
+      })
+    );
+
+    res.status(200).json({ data: itemsWithFileUrls });
+  } catch (err) {
+    console.error("List capsules error:", err);
+    res.status(500).json({ error: "Failed to list capsules" });
+  }
 });
 
 /**

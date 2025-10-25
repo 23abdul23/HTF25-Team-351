@@ -149,7 +149,7 @@ export function CapsuleViewer({ onBack }: CapsuleViewerProps) {
                 <div className="flex flex-wrap gap-2 mb-3">
                   {capsule.files.slice(0, 3).map((file, i) => (
                     <div key={i} className="glass p-2 rounded flex items-center gap-2">
-                      {file.contentType.slice(0, 5) === 'image' && <Image className="w-4 h-4 text-cyan-400" />}
+                      {file.contentType.slice(0, 5) === 'image' && <Image className="w-4 h-4 text-cyan-400" />} <img src={file.fileUrl} alt={file.name} className="w-4 h-4" />
                       {file.contentType.slice(0, 5) === 'video' && <Film className="w-4 h-4 text-purple-400" />}
                       {file.contentType.slice(0, 9) === 'document' && <FileText className="w-4 h-4 text-blue-400" />}
                       <span className="text-xs text-white/70">{file.name}</span>

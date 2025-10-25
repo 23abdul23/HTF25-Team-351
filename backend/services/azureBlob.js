@@ -100,3 +100,9 @@ export async function testConnection() {
     console.error("Azure Blob Storage connection FAILED ❌", err);
   }
 }
+
+
+export async function getFilesUrls(filename) {
+  const url = `https://${process.env.AZURE_STORAGE_ACCOUNT}.blob.core.windows.net/${process.env.AZURE_CONTAINER_NAME}/${filename}${process.env.AZURE_SAS_TOKEN}`;
+  return url;
+}
