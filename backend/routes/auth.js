@@ -1,88 +1,83 @@
+import { Router } from 'express';
+import bcrypt from 'bcryptjs';
+import { User } from '../models/User.js';
+import { signJwt } from '../lib/jwt.js';
+import { getUserFromReq, requireAuth } from '../middleware/authentication.js';
+import { googleAuthStart, googleAuthCallback } from '../lib/passport-google.js';
 
-import express from 'express'
-import jwt from 'jsonwebtoken'
-import User from '../models/User.js'
-import auth from '../middleware/auth.js'
+const router = Router();
 
-const router = express.Router()
-
-// Register
+function setAuthCookie(res, token) {
+  res.cookie('token', token, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  });
+}
 
 router.post('/register', async (req, res) => {
   try {
-    const {
-      username,
-      password,
-      fullName,
-    } = req.body
+    const { email, password, name } = req.body || {};
+    if (!email || !password) return res.status(400).json({ error: 'email and password are required' });
 
-    // Validate required fields
-    if (!username || !password || !fullName) {
-      return res.status(400).json({ message: 'Username, password and full name are required' })
-    }
+    const existing = await User.findOne({ email: String(email).toLowerCase() });
+    if (existing) return res.status(409).json({ error: 'email already in use' });
 
-    const newUser = new User({
-      username: username.trim(),
-      password,
-      fullName: fullName.trim(),
-    })
-
-    await newUser.save()
-
-    // Generate JWT token
-    const token = jwt.sign(
-      { userId: newUser._id, role: newUser.role },
-      process.env.JWT_SECRET,
-      { expiresIn: '24h' }
-    )
-
-    res.status(201).json({
-      token,
-      user: newUser 
-    })
-
-  } catch (error) {
-    console.error('Registration error:', error)
-    res.status(500).json({ message: 'Server error', error: error.message })
+    const passwordHash = await bcrypt.hash(password, 10);
+    const user = await User.create({ email: String(email).toLowerCase(), passwordHash, name });
+    const token = signJwt(user.id ?? user._id);
+    setAuthCookie(res, token);
+    res.json({ id: user.id ?? user._id, email: user.email, name: user.name });
+  } catch (err) {
+    console.error('Register error:', err);
+    res.status(500).json({ error: 'internal server error' });
   }
-})
+});
 
-// Login
 router.post('/login', async (req, res) => {
   try {
-    const { username, password } = req.body
+    const { email, password } = req.body || {};
+    if (!email || !password) return res.status(400).json({ error: 'email and password are required' });
 
-    const user = await User.findOne({ username }).populate('battalion')
-    if (!user) {
-      return res.status(400).json({ message: 'Invalid credentials' })
-    }
+    const user = await User.findOne({ email: String(email).toLowerCase() });
+    if (!user || !user.passwordHash) return res.status(401).json({ error: 'invalid credentials' });
 
-    const isMatch = await user.comparePassword(password)
-    if (!isMatch) {
-      return res.status(400).json({ message: 'Invalid credentials' })
-    }
+    const ok = await bcrypt.compare(password, user.passwordHash);
+    if (!ok) return res.status(401).json({ error: 'invalid credentials' });
 
-    if (!user.isActive) {
-      return res.status(400).json({ message: 'Account is deactivated' })
-    }
-
-    const token = jwt.sign(
-      { userId: user._id, role: user.role },
-      process.env.JWT_SECRET,
-      { expiresIn: '24h' }
-    )
-
-    res.json({
-      token,
-      user: {
-        id: user._id,
-        username: user.username,
-        fullName: user.fullName,
-      }
-    })
-  } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message })
+    const token = signJwt(user.id ?? user._id);
+    setAuthCookie(res, token);
+    res.json({ id: user.id ?? user._id, email: user.email, name: user.name });
+  } catch (err) {
+    console.error('Login error:', err);
+    res.status(500).json({ error: 'internal server error' });
   }
-})
+});
+
+router.post('/logout', (_req, res) => {
+  try {
+    res.clearCookie('token');
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Logout error:', err);
+    res.status(500).json({ error: 'internal server error' });
+  }
+});
+
+router.get('/me', requireAuth, async (req, res) => {
+  try {
+    const user = await getUserFromReq(req);
+    if (!user) return res.status(404).json({ error: 'not found' });
+    res.json({ id: user._id ?? user.id, email: user.email, name: user.name, avatarUrl: user.avatarUrl });
+  } catch (err) {
+    console.error('Get /me error:', err);
+    res.status(500).json({ error: 'internal server error' });
+  }
+});
+
+// Google OAuth (keep middleware factories as-is)
+router.get('/google', googleAuthStart());
+router.get('/google/callback', googleAuthCallback());
 
 export default router;

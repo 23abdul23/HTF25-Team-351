@@ -1,7 +1,7 @@
-const express = require("express");
-const multer = require("multer");
-const Capsule = require("../models/Capsule");
-const { uploadBuffer, getSignedUrl } = require("../services/azureBlob");
+import express from "express";
+import multer from "multer";
+import Capsule from "../models/Capsule.js";
+import { uploadBuffer, getSignedUrl } from "../services/azureBlob.js";
 
 const router = express.Router();
 const upload = multer({
@@ -105,37 +105,47 @@ router.post(
  * GET /api/capsules  (list metadata)
  */
 router.get("/", requireToken, async (req, res) => {
-  const items = await Capsule.find().sort({ createdAt: -1 }).lean();
-  res.json(items);
+  try {
+    const items = await Capsule.find().sort({ createdAt: -1 }).lean();
+    res.json(items);
+  } catch (err) {
+    console.error("List capsules error", err);
+    res.status(500).json({ error: "Failed to list capsules" });
+  }
 });
 
 /**
  * GET /api/capsules/:id  (get signed URLs if unlocked)
  */
 router.get("/:id", requireToken, async (req, res) => {
-  const cap = await Capsule.findById(req.params.id).lean();
-  if (!cap) return res.status(404).json({ error: "Not found" });
-  if (new Date(cap.unlockDate) > new Date()) {
-    return res.json({ unlocked: false, unlockDate: cap.unlockDate });
+  try {
+    const cap = await Capsule.findById(req.params.id).lean();
+    if (!cap) return res.status(404).json({ error: "Not found" });
+    if (new Date(cap.unlockDate) > new Date()) {
+      return res.json({ unlocked: false, unlockDate: cap.unlockDate });
+    }
+
+    const signedFiles = await Promise.all(
+      cap.files.map(async (f) => {
+        const url = await getSignedUrl(
+          f.blobName,
+          parseInt(process.env.SIGNED_URL_EXP_SECONDS || "900", 10)
+        );
+        return { ...f, signedUrl: url };
+      })
+    );
+
+    res.json({
+      unlocked: true,
+      id: cap._id,
+      title: cap.title,
+      description: cap.description,
+      files: signedFiles,
+    });
+  } catch (err) {
+    console.error("Get capsule error", err);
+    res.status(500).json({ error: "Failed to get capsule" });
   }
-
-  const signedFiles = await Promise.all(
-    cap.files.map(async (f) => {
-      const url = getSignedUrl(
-        f.blobName,
-        parseInt(process.env.SIGNED_URL_EXP_SECONDS || "900", 10),
-      );
-      return { ...f, signedUrl: url };
-    }),
-  );
-
-  res.json({
-    unlocked: true,
-    id: cap._id,
-    title: cap.title,
-    description: cap.description,
-    files: signedFiles,
-  });
 });
 
-module.exports = router;
+export default router;

@@ -1,15 +1,28 @@
 import express from "express";
 import mongoose from "mongoose";
 import cors from "cors";
+import cookieParser from "cookie-parser";
 import { configDotenv } from "dotenv";
-import auth from "./routes/auth.js";
+
+import authRoutes from "./routes/auth.js";
+import capsuleRoutes from "./routes/capsule.js";
+import sasRoutes from "./routes/sas.js";
 
 configDotenv();
 
 const app = express();
 
-app.use(cors());
+const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || "http://localhost:5173";
+const corsOptions = {
+  origin: CLIENT_ORIGIN,
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+};
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions)); // handle preflight
 
+app.use(cookieParser());
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
@@ -18,7 +31,9 @@ import sasRoutes from "./routes/sas.js";
 app.use("/api/sas", sasRoutes);
 
 // Routes
-app.use("/api/auth", auth);
+app.use("/api/auth", authRoutes);
+app.use("/api/capsules", capsuleRoutes);
+app.use("/api/sas", sasRoutes);
 
 // Health check endpoint
 app.get("/api/health", (req, res) => {

@@ -1,7 +1,7 @@
-const express = require("express");
-const multer = require("multer");
-const Capsule = require("../models/Capsule");
-const { uploadBuffer, getSignedUrl } = require("../services/azureBlob");
+import express from "express";
+import multer from "multer";
+import Capsule from "../models/Capsule.js";
+import { uploadBuffer, getSignedUrl } from "../services/azureBlob.js";
 
 const router = express.Router();
 const upload = multer({
@@ -12,8 +12,9 @@ const upload = multer({
 // simple token middleware (replace with your real one)
 function requireToken(req, res, next) {
   const token = req.header("x-api-token") || req.query.token;
-  if (token !== process.env.SINGLE_USER_TOKEN)
+  if (token !== process.env.SINGLE_USER_TOKEN) {
     return res.status(401).json({ error: "Unauthorized" });
+  }
   next();
 }
 
