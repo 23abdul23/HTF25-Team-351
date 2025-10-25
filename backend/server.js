@@ -1,7 +1,11 @@
-const express = require('express')
-const mongoose = require('mongoose')
-const cors = require('cors')
-require('dotenv').config()
+
+import express from 'express'
+import mongoose from 'mongoose'
+import cors from 'cors'
+import { configDotenv } from 'dotenv'
+import auth from './routes/auth.js'
+
+configDotenv()
 
 const app = express()
 
@@ -11,7 +15,7 @@ app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 
 // Routes
-app.use('/api/auth', require('./routes/auth'))
+app.use('/api/auth', auth)
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

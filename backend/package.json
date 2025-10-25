@@ -36,5 +36,5 @@
   ],
   "author": "SOLDIER SUPPORT SYSTEM Team",
   "license": "MIT",
-  "type": "commonjs"
+  "type": "module"
 }
