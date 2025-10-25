@@ -168,10 +168,20 @@ router.get("/", requireToken, async (req, res) => {
       })
     );
 
-    res.status(200).json({ data: itemsWithFileUrls });
+    const items = await Capsule.find({
+      $or: [
+        { createdBy: req.userId },
+        { recipients: req.userId },
+        { visibility: "public" },
+      ],
+    })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    res.json(items);
   } catch (err) {
-    console.error("List capsules error:", err);
-    res.status(500).json({ error: "Failed to list capsules" });
+    console.error("List capsules error", err);
+    res.status(500).json({ error: "Failed to fetch capsules" });
   }
 });
 
