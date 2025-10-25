@@ -1,0 +1,40 @@
+{
+  "name": "warrior-support-system-backend",
+  "version": "1.0.0",
+  "description": "Backend for SOLDIER SUPPORT SYSTEM",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "cleanup-db": "node --no-deprecation scripts/cleanup-database.js",
+    "init-db": "node --no-deprecation scripts/init-database.js",
+    "reset-db": "npm run cleanup-db && npm run init-db",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "csv-parser": "^3.0.0",
+    "dotenv": "^16.3.1",
+    "express": "^4.21.2",
+    "json2csv": "^6.0.0-alpha.2",
+    "jsonwebtoken": "^9.0.2",
+    "mongodb": "^6.18.0",
+    "mongoose": "^7.5.0",
+    "multer": "^1.4.5-lts.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  },
+  "keywords": [
+    "military",
+    "support",
+    "system",
+    "nodejs",
+    "mongodb"
+  ],
+  "author": "SOLDIER SUPPORT SYSTEM Team",
+  "license": "MIT",
+  "type": "module"
+}
