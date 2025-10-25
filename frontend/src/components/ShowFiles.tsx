@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
-
 const ShowFiles = () => {
+
   const [files, setFiles] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  console.log("Backend URL:", import.meta.env.NEXT_BACKEND_URL);
 
   useEffect(() => {
     fetch("http://localhost:5000/files")
@@ -22,7 +24,7 @@ const ShowFiles = () => {
   }, []);
 
   if (loading) return <p>Loading files...</p>;
-  if (error) return <p>Error: {error}</p>;
+  if (error) return <p>Error:hahah {error}</p>;
 
   return (
     <div>

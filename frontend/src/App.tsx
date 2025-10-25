@@ -1,4 +1,4 @@
-import showFiles from "components/ShowFiles"
+import ShowFiles from "./components/ShowFiles";
 import './App.css'
 
 function App() {
@@ -6,7 +6,7 @@ function App() {
   return (
     <>
     	<div>
-		<ShowFiles />
+		    <ShowFiles />
 
     	</div>
 
