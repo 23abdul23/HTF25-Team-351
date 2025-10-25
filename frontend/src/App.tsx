@@ -1,61 +1,49 @@
-import React, { useEffect, useState } from 'react'
-import './App.css'
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000'
+import React, { useEffect, useState } from "react";
+import "./App.css";
+import ShowFiles from "./components/ShowFiles";
+import Login from "./components/Login";
 
-type User = { id: string; email: string; name?: string; avatarUrl?: string }
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5000";
+
+type User = { id: string; email: string; name?: string; avatarUrl?: string };
 
 async function api(path: string, init?: RequestInit) {
   const res = await fetch(`${API_BASE}/api${path}`, {
     ...init,
-    headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
-    credentials: 'include',
-  })
-  if (!res.ok) throw new Error((await res.json()).error || 'Request failed')
-  return res.json()
+    headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error((await res.json()).error || "Request failed");
+  return res.json();
 }
 
 export function App() {
-  const [user, setUser] = useState<User | null>(null)
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [name, setName] = useState('')
-  const [error, setError] = useState<string | null>(null)
+  const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
-    api('/auth/me')
+    api("/auth/me")
       .then(setUser)
-      .catch(() => setUser(null))
-  }, [])
-
-  async function handleRegister(e: React.FormEvent) {
-    e.preventDefault()
-    setError(null)
-    try {
-      const u = await api('/auth/register', { method: 'POST', body: JSON.stringify({ email, password, name }) })
-      setUser(u)
-    } catch (err: any) {
-      setError(err.message)
-    }
-  }
-
-  async function handleLogin(e: React.FormEvent) {
-    e.preventDefault()
-    setError(null)
-    try {
-      const u = await api('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) })
-      setUser(u)
-    } catch (err: any) {
-      setError(err.message)
-    }
-  }
+      .catch(() => setUser(null));
+  }, []);
 
   async function handleLogout() {
-    await api('/auth/logout', { method: 'POST' })
-    setUser(null)
+    try {
+      await api("/auth/logout", { method: "POST" });
+    } catch {
+      // ignore
+    }
+    setUser(null);
   }
 
-  function handleGoogle() {
-    window.location.href = `${API_BASE}/api/auth/google`
+  // When logged in show ShowFiles page, otherwise render Login component
+  if (!user) {
+    return (
+      <div className="app-shell">
+        <div className="stars" aria-hidden="true" />
+        <div className="aurora" aria-hidden="true" />
+        <Login onLogin={(u) => setUser(u)} />
+      </div>
+    );
   }
 
   return (
@@ -63,68 +51,20 @@ export function App() {
       <div className="stars" aria-hidden="true" />
       <div className="aurora" aria-hidden="true" />
 
-      <main className="auth-card">
-        {user ? (
-          <div className="stack">
-            <h1 className="headline">Welcome back, Cadet</h1>
-            <p className="subhead">{user.name || user.email}</p>
-            {user.avatarUrl && (
-              <img
-                className="avatar"
-                src={user.avatarUrl}
-                alt="profile"
-                onError={(e) => {
-                  (e.currentTarget as HTMLImageElement).style.display = 'none'
-                }}
-              />
-            )}
-            <button className="primary" onClick={handleLogout}>
-              Log out
-            </button>
-          </div>
-        ) : (
-          <div className="stack">
-            <div>
-              <p className="eyebrow">Mission Control</p>
-              <h1 className="headline">Sign in to the Galaxy</h1>
-              <p className="copy">Authenticate with email or warp in using Google.</p>
-            </div>
+      <header style={{ padding: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div>
+          <strong>Welcome,</strong> {user.name || user.email}
+        </div>
+        <div>
+          <button onClick={handleLogout} className="ghost">
+            Log out
+          </button>
+        </div>
+      </header>
 
-            {error && <p className="error">{error}</p>}
-
-            <form className="form" onSubmit={handleLogin}>
-              <label className="field">
-                <span>Email</span>
-                <input placeholder="astro@ship.com" value={email} onChange={(e) => setEmail(e.target.value)} />
-              </label>
-              <label className="field">
-                <span>Password</span>
-                <input placeholder="••••••••" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-              </label>
-              <label className="field">
-                <span>Call sign (optional)</span>
-                <input placeholder="Nova" value={name} onChange={(e) => setName(e.target.value)} />
-              </label>
-              <div className="actions">
-                <button className="primary" type="submit">
-                  Login
-                </button>
-                <button className="ghost" type="button" onClick={handleRegister}>
-                  Register
-                </button>
-              </div>
-            </form>
-
-            <div className="divider">
-              <span>or</span>
-            </div>
-
-            <button className="secondary" type="button" onClick={handleGoogle}>
-              Continue with Google
-            </button>
-          </div>
-        )}
+      <main style={{ padding: 16 }}>
+        <ShowFiles />
       </main>
     </div>
-  )
+  );
 }
