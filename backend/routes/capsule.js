@@ -108,11 +108,10 @@ router.post(
  * GET /api/capsules  (list metadata)
  */
 router.get("/", requireToken, async (req, res) => {
-
   console.log("Listing all capsules metadata...");
   const items = await Capsule.find().sort({ createdAt: -1 }).lean();
 
-  res.status(200).json({data : items});
+  res.status(200).json({ data: items });
 });
 
 /**
@@ -121,7 +120,6 @@ router.get("/", requireToken, async (req, res) => {
 router.get("/:id", requireToken, async (req, res) => {
   const cap = await Capsule.findById(req.params.id).lean();
   if (!cap) return res.status(404).json({ error: "Not found" });
-
 
   if (new Date(cap.unlockDate) > new Date()) {
     return res.json({ unlocked: false, unlockDate: cap.unlockDate });
