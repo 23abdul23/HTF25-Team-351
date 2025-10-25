@@ -11,14 +11,22 @@ if (!connStr || !containerName)
 const blobServiceClient = BlobServiceClient.fromConnectionString(connStr);
 const containerClient = blobServiceClient.getContainerClient(containerName);
 
-// upload buffer -> returns metadata { name, size }
-export async function uploadBuffer(buffer, destFilename, contentType) {
-  const blockBlobClient = containerClient.getBlockBlobClient(destFilename);
+export async function uploadBuffer(
+  buffer,
+  destFilename,
+  contentType,
+  folder = "",
+) {
+  // This is important
+  const blobName = folder ? `${folder}/${destFilename}` : destFilename;
+  const blockBlobClient = containerClient.getBlockBlobClient(blobName);
+
   await blockBlobClient.uploadData(buffer, {
     blobHTTPHeaders: { blobContentType: contentType },
   });
+
   const props = await blockBlobClient.getProperties();
-  return { name: destFilename, size: props.contentLength };
+  return { name: blobName, size: props.contentLength };
 }
 
 // generate a read SAS URL for an existing blob
