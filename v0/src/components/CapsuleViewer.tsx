@@ -1,8 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Lock, Unlock, Clock, Image, FileText, Film, Trash2, Calendar } from 'lucide-react';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
+
+import axios from 'axios';
+
 
 interface Capsule {
   id: number;
@@ -17,54 +20,51 @@ interface CapsuleViewerProps {
   onBack: () => void;
 }
 
+
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
+
+async function api(path: string, init?: RequestInit) {
+  const res = await fetch(`${API_BASE}/api${path}`, {
+    ...init,
+    headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
+    credentials: 'include',
+  });
+
+  let body: any = null;
+  try {
+    body = await res.json();
+  } catch {
+    /* ignore parse errors */
+  }
+
+  if (!res.ok) throw new Error(body?.error || 'Request failed');
+  return body;
+}
+
+
 export function CapsuleViewer({ onBack }: CapsuleViewerProps) {
+
+  const [capsules, setCapsules] = useState<Capsule[]>([]);
   const [selectedCapsule, setSelectedCapsule] = useState<Capsule | null>(null);
-  const [capsules, setCapsules] = useState<Capsule[]>([
-    {
-      id: 1,
-      name: 'Summer Memories 2024',
-      unlockDate: new Date('2025-06-21'),
-      isLocked: true,
-      files: [
-        { name: 'beach.jpg', type: 'image' },
-        { name: 'sunset.jpg', type: 'image' },
-      ],
-      memo: 'Remember the amazing beach trip!',
-    },
-    {
-      id: 2,
-      name: 'Birthday Wishes',
-      unlockDate: new Date('2024-12-25'),
-      isLocked: false,
-      files: [
-        { name: 'party.mp4', type: 'video' },
-        { name: 'cake.jpg', type: 'image' },
-      ],
-      memo: 'Happy birthday to me! What a great celebration.',
-    },
-    {
-      id: 3,
-      name: 'New Year Resolutions',
-      unlockDate: new Date('2026-01-01'),
-      isLocked: true,
-      files: [
-        { name: 'goals.txt', type: 'document' },
-      ],
-      memo: "Let's see if I achieved these goals!",
-    },
-    {
-      id: 4,
-      name: 'Graduation Day',
-      unlockDate: new Date('2024-05-15'),
-      isLocked: false,
-      files: [
-        { name: 'ceremony.mp4', type: 'video' },
-        { name: 'diploma.jpg', type: 'image' },
-        { name: 'speech.txt', type: 'document' },
-      ],
-      memo: 'The proudest moment of my life!',
-    },
-  ]);
+  // const [capsules, setCapsules] = useState<Capsule[]>([
+   
+  
+  useEffect(() => {
+
+    const fetchData = async () => {
+    const response = await api('/capsules',
+      {method: 'GET'}
+    );
+    const data = await response.data;
+
+    console.log("Fetched capsules data:", data);
+    setCapsules(data);
+
+    };
+
+    fetchData();
+
+  }, []);
 
   const handleDelete = (id: number) => {
     setCapsules(capsules.filter(c => c.id !== id));
@@ -108,9 +108,9 @@ export function CapsuleViewer({ onBack }: CapsuleViewerProps) {
 
         {/* Capsules Grid */}
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {capsules.map((capsule, index) => (
+          {capsules?.map((capsule, index) => (
             <motion.div
-              key={capsule.id}
+              key={index}
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: index * 0.1 }}
@@ -130,7 +130,7 @@ export function CapsuleViewer({ onBack }: CapsuleViewerProps) {
                   <div className="flex items-center gap-2 text-sm">
                     <Calendar className={`w-4 h-4 ${capsule.isLocked ? 'text-purple-400' : 'text-cyan-400'}`} />
                     <span className={capsule.isLocked ? 'text-purple-300/70' : 'text-cyan-300/70'}>
-                      {capsule.unlockDate.toLocaleDateString()}
+                      {capsule.unlockDate}
                     </span>
                   </div>
                 </div>
@@ -149,9 +149,9 @@ export function CapsuleViewer({ onBack }: CapsuleViewerProps) {
                 <div className="flex flex-wrap gap-2 mb-3">
                   {capsule.files.slice(0, 3).map((file, i) => (
                     <div key={i} className="glass p-2 rounded flex items-center gap-2">
-                      {file.type === 'image' && <Image className="w-4 h-4 text-cyan-400" />}
-                      {file.type === 'video' && <Film className="w-4 h-4 text-purple-400" />}
-                      {file.type === 'document' && <FileText className="w-4 h-4 text-blue-400" />}
+                      {file.contentType.slice(0, 5) === 'image' && <Image className="w-4 h-4 text-cyan-400" />}
+                      {file.contentType.slice(0, 5) === 'video' && <Film className="w-4 h-4 text-purple-400" />}
+                      {file.contentType.slice(0, 9) === 'document' && <FileText className="w-4 h-4 text-blue-400" />}
                       <span className="text-xs text-white/70">{file.name}</span>
                     </div>
                   ))}
