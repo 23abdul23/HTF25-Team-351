@@ -117,48 +117,6 @@ server.on("error", (err) => {
   process.exit(1);
 });
 
-// Simple proxy endpoints to avoid CORS when calling third-party API (memsky)
-// Frontend should call /api/proxy/auth/* instead of calling memsky directly.
-app.post("/api/proxy/auth/login", async (req, res) => {
-  try {
-    const remote = "https://memsky.azurewebsites.net/api/auth/login";
-    const forwardRes = await fetch(remote, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        // forward authorization if present
-        ...(req.headers.authorization ? { Authorization: req.headers.authorization } : {}),
-      },
-      body: JSON.stringify(req.body || {}),
-    });
-
-    const text = await forwardRes.text();
-    let parsed;
-    try { parsed = JSON.parse(text); } catch { parsed = text; }
-    res.status(forwardRes.status).send(parsed);
-  } catch (err) {
-    console.error("Proxy login error:", err);
-    res.status(502).json({ error: "Proxy failed", details: String(err) });
-  }
-});
-
-app.get("/api/proxy/auth/me", async (req, res) => {
-  try {
-    const remote = "https://memsky.azurewebsites.net/api/auth/me";
-    const forwardRes = await fetch(remote, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-        ...(req.headers.authorization ? { Authorization: req.headers.authorization } : {}),
-      },
-    });
-
-    const text = await forwardRes.text();
-    let parsed;
-    try { parsed = JSON.parse(text); } catch { parsed = text; }
-    res.status(forwardRes.status).send(parsed);
-  } catch (err) {
-    console.error("Proxy me error:", err);
-    res.status(502).json({ error: "Proxy failed", details: String(err) });
-  }
+app.get('/api/auth/me', (req, res) => {
+  res.json({ user: 'John Doe' });
 });
