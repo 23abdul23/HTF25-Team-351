@@ -7,7 +7,7 @@ import { configDotenv } from "dotenv";
 import authRoutes from "./routes/auth.js";
 import capsuleRoutes from "./routes/capsule.js";
 import sasRoutes from "./routes/sas.js";
-
+import profileRoutes from "./routes/profile.js";
 configDotenv();
 
 const app = express();
@@ -43,6 +43,7 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use("/api/auth", authRoutes);
 app.use("/api/capsules", capsuleRoutes);
 app.use("/api/sas", sasRoutes);
+app.use("/api/profile",profileRoutes);
 
 // Health check endpoint
 app.get("/api/health", (req, res) => {
@@ -61,7 +62,7 @@ app.use((err, req, res, next) => {
 // MongoDB connection with better error handling
 mongoose
   .connect(
-    process.env.MONGODB_URI_C || "mongodb://localhost:27017/CBIT_local",
+    process.env.MONGODB_URI || "mongodb://localhost:27017/CBIT_local",
     {
       useNewUrlParser: true,
       useUnifiedTopology: true,
