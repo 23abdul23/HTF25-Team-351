@@ -23,7 +23,11 @@ const capsuleSchema = new mongoose.Schema(
       default: "private",
     },
     files: [fileSchema],
+    
+    lockDate: { type: Date, index: true },
     unlockDate: { type: Date, required: true, index: true },
+    
+    
     communityCapsule: { type: Boolean, default: false },
     sharedWith: [{ type: String, index: true }],
     sharedCapsuleId : {type : String},

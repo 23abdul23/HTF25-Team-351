@@ -62,7 +62,7 @@ app.use((err, req, res, next) => {
 // MongoDB connection with better error handling
 mongoose
   .connect(
-    process.env.MONGODB_URI || "mongodb://localhost:27017/CBIT_local",
+    process.env.MONGODB_URI_C || "mongodb://localhost:27017/CBIT_local",
     {
       useNewUrlParser: true,
       useUnifiedTopology: true,
