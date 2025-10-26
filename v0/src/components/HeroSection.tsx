@@ -47,24 +47,37 @@ export function HeroSection({ onNavigate }: HeroSectionProps) {
       <motion.div
         initial={{ opacity: 0, x: -20 }}
         animate={{ opacity: 1, x: 0 }}
-        className="absolute left-8 top-1/2 -translate-y-1/2 z-10 cursor-pointer"
-        onClick={() => onNavigate('community')}
+        className="absolute left-6 top-1/2 -translate-y-1/2 z-50"
       >
-        <div className="glass p-4 rounded-lg neon-cyan hover:scale-110 transition-transform">
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => { console.log('Navigate -> community'); onNavigate('community'); }}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onNavigate('community'); }}}
+          className="glass p-4 rounded-lg neon-cyan hover:scale-110 transition-transform cursor-pointer pointer-events-auto"
+        >
           <ChevronLeft className="w-8 h-8 text-cyan-400" />
-          <p className="text-cyan-400 mt-2 text-sm">Community<br />Wall</p>
+          <p className="text-cyan-400 mt-2 text-sm">Community<br/>Wall</p>
         </div>
       </motion.div>
 
       <motion.div
         initial={{ opacity: 0, x: 20 }}
         animate={{ opacity: 1, x: 0 }}
-        className="absolute right-8 top-1/2 -translate-y-1/2 z-10 cursor-pointer"
-        onClick={() => onNavigate('planets')}
+        className="absolute inset-y-50 right-0 z-50 pointer-events-none"
       >
-        <div className="glass p-4 rounded-lg neon-purple hover:scale-110 transition-transform">
-          <ChevronRight className="w-8 h-8 text-purple-400" />
-          <p className="text-purple-400 mt-2 text-sm">Solar<br />System</p>
+        {/* container stretches full height; inner button aligned to right end */}
+        <div className="h-full flex items-center justify-end pr-6 pointer-events-auto">
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => { console.log('Navigate -> planets'); onNavigate('planets'); }}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onNavigate('planets'); }}}
+            className="glass p-4 rounded-lg neon-purple hover:scale-110 transition-transform cursor-pointer"
+          >
+            <ChevronRight className="w-8 h-8 text-purple-400" />
+            <p className="text-purple-400 mt-2 text-sm">Solar<br/>System</p>
+          </div>
         </div>
       </motion.div>
 
