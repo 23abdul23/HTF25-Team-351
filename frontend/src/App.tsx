@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
-import { StarfieldBackground } from "./components/StarfieldBackground";
-import { HeroSection } from "./components/HeroSection";
-import { AuthPage } from "./components/AuthPage";
-import { CreateCapsule } from "./components/CreateCapsule";
-import { CapsuleViewer } from "./components/CapsuleViewer";
-import { CommunityCapsules } from "./components/CommunityCapsules";
-import { FriendsPlanets } from "./components/FriendsPlanets";
+import { StarfieldBackground } from "./components/StarfieldBackground.tsx";
+import { HeroSection } from "./components/HeroSection.tsx";
+import { AuthPage } from "./components/AuthPage.tsx";
+import { CreateCapsule } from "./components/CreateCapsule.tsx";
+import { CapsuleViewer } from "./components/CapsuleViewer.tsx";
+import { CommunityCapsules } from "./components/CommunityCapsules.tsx";
+import { FriendsPlanets } from "./components/FriendsPlanets.tsx";
 
 type Page = "auth" | "home" | "create" | "viewer" | "community" | "planets";
 
