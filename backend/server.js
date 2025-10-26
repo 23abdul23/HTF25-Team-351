@@ -43,7 +43,7 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use("/api/auth", authRoutes);
 app.use("/api/capsules", capsuleRoutes);
 app.use("/api/sas", sasRoutes);
-app.use("/api/profile",profileRoutes);
+app.use("/api/profile", profileRoutes);
 
 // Health check endpoint
 app.get("/api/health", (req, res) => {
@@ -86,7 +86,7 @@ mongoose.connection.on("disconnected", () => {
   console.log("MongoDB disconnected");
 });
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 8080;
 
 app.listen(PORT, () => {
   console.log(`server running on port ${PORT}`);
