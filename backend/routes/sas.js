@@ -1,236 +1,209 @@
 import express from "express";
-import multer from "multer";
-import Capsule from "../models/Capsule.js";
-import { uploadBuffer, getSignedUrl } from "../services/azureBlob.js";
-import { configDotenv } from "dotenv";
-configDotenv();
-
 import {
   BlobServiceClient,
-  StorageSharedKeyCredential,
   generateBlobSASQueryParameters,
   BlobSASPermissions,
+  StorageSharedKeyCredential,
 } from "@azure/storage-blob";
+
+import { requireAuth, getUserFromReq } from "../middleware/authentication.js";
 
 const router = express.Router();
 
-// Multer memory upload
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 200 * 1024 * 1024 }, // 200 MB
-});
-
-// Simple token auth middleware
-function requireToken(req, res, next) {
-  const token = req.header("x-api-token") || req.query.token;
-  if (token !== process.env.SINGLE_USER_TOKEN)
-    return res.status(401).json({ error: "Unauthorized" });
-  next();
+// Helper to get userId from request
+async function getUserId(req) {
+  const user = await getUserFromReq(req);
+  return user?._id?.toString() || user?.id?.toString();
 }
 
-// Use the conncectio string
-const connectionString = process.env.AZURE_STORAGE_CONNECTION_STRING;
-if (!connectionString) {
-  throw new Error("AZURE_STORAGE_CONNECTION_STRING missing in .env");
-}
+// Validate environment variables at startup
+const CONNECTION_STRING = process.env.AZURE_STORAGE_CONNECTION_STRING;
+const AZURE_CONTAINER_NAME = process.env.AZURE_CONTAINER_NAME || "capsules";
 
-const containerName = process.env.AZURE_CONTAINER_NAME || "capsules";
-const blobServiceClient =
-  BlobServiceClient.fromConnectionString(connectionString);
-const containerClient = blobServiceClient.getContainerClient(containerName);
+let blobServiceClient = null;
+let accountName = null;
+let accountKey = null;
 
-// Helper: extract accountName + accountKey for SAS generation
-const match = connectionString.match(/AccountName=(.*?);AccountKey=(.*?);/);
-if (!match) throw new Error("Invalid Azure Storage connection string format");
-const [_, accountName, accountKey] = match;
-const sharedKeyCredential = new StorageSharedKeyCredential(
-  accountName,
-  accountKey,
-);
-
-/**
- * POST /api/capsules (JSON flow)
- */
-router.post("/", requireToken, express.json(), async (req, res) => {
+if (CONNECTION_STRING) {
   try {
-    const {
-      title,
-      description,
-      unlockDate,
-      blobs,
-      createdBy,
-      recepients,
-      visibility,
-    } = req.body;
+    blobServiceClient =
+      BlobServiceClient.fromConnectionString(CONNECTION_STRING);
 
-    if (!createdBy)
-      return res.status(400).json({ error: "createdBy is required" });
-    if (!Array.isArray(blobs) || blobs.length === 0)
-      return res.status(400).json({ error: "blobs array required" });
-
-    const savedFiles = blobs
-      .filter(
-        (b) =>
-          b && typeof b.blobName === "string" && /^\d+_.+/.test(b.blobName),
-      )
-      .map((b) => ({
-        originalName:
-          b.originalName || b.blobName.split("_").slice(1).join("_"),
-        blobName: b.blobName,
-        contentType: b.contentType || "application/octet-stream",
-        size: b.size || 0,
-      }));
-
-    if (!savedFiles.length)
-      return res.status(400).json({ error: "No valid blobs provided" });
-
-    const capsule = await Capsule.create({
-      title: title || savedFiles.map((s) => s.originalName).join(", "),
-      description,
-      createdBy,
-      recepients: Array.isArray(recepients) ? recepients : [],
-      visibility: ["private", "public", "shared"].includes(visibility)
-        ? visibility
-        : "private",
-      files: savedFiles,
-      unlockDate: unlockDate ? new Date(unlockDate) : new Date(),
-    });
-
-    res.json({ ok: true, id: capsule._id });
-  } catch (err) {
-    console.error("Create capsule (SAS) error", err);
-    res.status(500).json({ error: "Failed to create capsule" });
-  }
-});
-
-/**
- * POST /api/capsules/upload (multipart/form-data)
- */
-router.post(
-  "/upload",
-  requireToken,
-  upload.array("files", 20),
-  async (req, res) => {
-    try {
-      const {
-        title,
-        description,
-        unlockDate,
-        createdBy,
-        recepients,
-        visibility,
-      } = req.body;
-
-      if (!createdBy)
-        return res.status(400).json({ error: "createdBy is required" });
-      if (!req.files || !req.files.length)
-        return res.status(400).json({ error: "No files uploaded" });
-
-      const savedFiles = [];
-      for (const f of req.files) {
-        const safeName = `${Date.now()}_${f.originalname.replace(/\s+/g, "_")}`;
-        const meta = await uploadBuffer(f.buffer, safeName, f.mimetype);
-        savedFiles.push({
-          originalName: f.originalname,
-          blobName: meta.name,
-          contentType: f.mimetype,
-          size: meta.size,
-        });
+    const connStringParts = CONNECTION_STRING.split(";");
+    for (const part of connStringParts) {
+      if (part.startsWith("AccountName=")) {
+        accountName = part.substring("AccountName=".length);
       }
-
-      const capsule = await Capsule.create({
-        title: title || savedFiles.map((s) => s.originalName).join(", "),
-        description,
-        createdBy,
-        recepients: Array.isArray(recepients) ? recepients : [],
-        visibility: ["private", "public", "shared"].includes(visibility)
-          ? visibility
-          : "private",
-        files: savedFiles,
-        unlockDate: unlockDate ? new Date(unlockDate) : new Date(),
-      });
-
-      res.json({ ok: true, id: capsule._id });
-    } catch (err) {
-      console.error("Create capsule (multipart) error", err);
-      res.status(500).json({ error: "Failed to upload files" });
+      if (part.startsWith("AccountKey=")) {
+        accountKey = part.substring("AccountKey=".length);
+      }
     }
-  },
-);
+
+    console.log(" Azure Blob Storage configured successfully");
+    console.log(`   Account: ${accountName}`);
+    console.log(`   Container: ${AZURE_CONTAINER_NAME}`);
+  } catch (err) {
+    console.error(" Failed to initialize Azure Blob Storage:", err.message);
+  }
+} else {
+  console.error(
+    "AZURE_STORAGE_CONNECTION_STRING is not set in environment variables",
+  );
+  console.warn(
+    " Azure Blob Storage not configured - SAS endpoint will not work",
+  );
+}
 
 /**
- * POST /api/get-sas
- * Body: { blobName, permissions?, expiresInSeconds? }
+ * POST /api/sas/generate
+ * Generate SAS URL for uploading a file
  */
-router.post("/get-sas", requireToken, express.json(), async (req, res) => {
+router.post("/generate", requireAuth, async (req, res) => {
   try {
-    const { blobName, permissions = "r", expiresInSeconds = 900 } = req.body;
-    if (!blobName)
-      return res.status(400).json({ error: "blobName is required" });
+    if (!blobServiceClient || !accountName || !accountKey) {
+      return res.status(503).json({
+        error:
+          "Azure Blob Storage is not configured. Please check AZURE_STORAGE_CONNECTION_STRING.",
+      });
+    }
 
-    const expiresOn = new Date(Date.now() + expiresInSeconds * 1000);
+    const { fileName, contentType } = req.body;
+
+    if (!fileName) {
+      return res.status(400).json({ error: "fileName is required" });
+    }
+
+    const timestamp = Date.now();
+    const safeName = fileName.replace(/\s+/g, "_");
+    const blobName = `${req.userId}/${timestamp}_${safeName}`;
+
+    const containerClient =
+      blobServiceClient.getContainerClient(AZURE_CONTAINER_NAME);
+    const blobClient = containerClient.getBlobClient(blobName);
+
+    const startsOn = new Date();
+    const expiresOn = new Date(startsOn);
+    expiresOn.setMinutes(startsOn.getMinutes() + 30); // 30 minutes expiry
+
+    const sharedKeyCredential = new StorageSharedKeyCredential(
+      accountName,
+      accountKey,
+    );
+
     const sasToken = generateBlobSASQueryParameters(
       {
-        containerName,
-        blobName,
-        permissions: BlobSASPermissions.parse(permissions),
+        containerName: AZURE_CONTAINER_NAME,
+        blobName: blobName,
+        permissions: BlobSASPermissions.parse("cw"), // create, write
+        startsOn,
         expiresOn,
+        contentType: contentType || "application/octet-stream",
       },
       sharedKeyCredential,
     ).toString();
 
-    const sasUrl = `https://${accountName}.blob.core.windows.net/${containerName}/${blobName}?${sasToken}`;
-    res.json({ sasUrl, expiresOn });
-  } catch (err) {
-    console.error("Generate SAS error", err);
-    res.status(500).json({ error: "Failed to generate SAS" });
-  }
-});
-
-/**
- * GET /api/capsules (list)
- */
-router.get("/", requireToken, async (req, res) => {
-  try {
-    const items = await Capsule.find().sort({ createdAt: -1 }).lean();
-    res.json(items);
-  } catch (err) {
-    console.error("List capsules error", err);
-    res.status(500).json({ error: "Failed to list capsules" });
-  }
-});
-
-/**
- * GET /api/capsules/:id (details + signed URLs)
- */
-router.get("/:id", requireToken, async (req, res) => {
-  try {
-    const cap = await Capsule.findById(req.params.id).lean();
-    if (!cap) return res.status(404).json({ error: "Not found" });
-
-    if (new Date(cap.unlockDate) > new Date()) {
-      return res.json({ unlocked: false, unlockDate: cap.unlockDate });
-    }
-
-    const signedFiles = await Promise.all(
-      cap.files.map(async (f) => {
-        const url = await getSignedUrl(
-          f.blobName,
-          parseInt(process.env.SIGNED_URL_EXP_SECONDS || "900", 10),
-        );
-        return { ...f, signedUrl: url };
-      }),
-    );
+    const sasUrl = `${blobClient.url}?${sasToken}`;
 
     res.json({
-      unlocked: true,
-      ...cap,
-      files: signedFiles,
+      ok: true,
+      sasUrl,
+      blobName,
+      expiresOn: expiresOn.toISOString(),
     });
   } catch (err) {
-    console.error("Get capsule error", err);
-    res.status(500).json({ error: "Failed to get capsule" });
+    console.error("Generate SAS error:", err);
+    res
+      .status(500)
+      .json({ error: "Failed to generate SAS URL", details: err.message });
   }
+});
+
+/**
+ * POST /api/sas/generate-batch
+ * Generate multiple SAS URLs for batch upload
+ */
+router.post("/generate-batch", requireAuth, async (req, res) => {
+  try {
+    if (!blobServiceClient || !accountName || !accountKey) {
+      return res.status(503).json({
+        error: "Azure Blob Storage is not configured",
+      });
+    }
+
+    const { files } = req.body; // Array of { fileName, contentType, size }
+
+    if (!Array.isArray(files) || files.length === 0) {
+      return res.status(400).json({ error: "files array is required" });
+    }
+
+    if (files.length > 20) {
+      return res
+        .status(400)
+        .json({ error: "Maximum 20 files allowed per batch" });
+    }
+
+    const containerClient =
+      blobServiceClient.getContainerClient(AZURE_CONTAINER_NAME);
+    const timestamp = Date.now();
+    const sharedKeyCredential = new StorageSharedKeyCredential(
+      accountName,
+      accountKey,
+    );
+
+    const sasUrls = files.map((file, index) => {
+      const safeName = file.fileName.replace(/\s+/g, "_");
+      const blobName = `${req.userId}/${timestamp}_${index}_${safeName}`;
+      const blobClient = containerClient.getBlobClient(blobName);
+
+      const startsOn = new Date();
+      const expiresOn = new Date(startsOn);
+      expiresOn.setMinutes(startsOn.getMinutes() + 30);
+
+      const sasToken = generateBlobSASQueryParameters(
+        {
+          containerName: AZURE_CONTAINER_NAME,
+          blobName: blobName,
+          permissions: BlobSASPermissions.parse("cw"),
+          startsOn,
+          expiresOn,
+          contentType: file.contentType || "application/octet-stream",
+        },
+        sharedKeyCredential,
+      ).toString();
+
+      return {
+        originalName: file.fileName,
+        blobName,
+        sasUrl: `${blobClient.url}?${sasToken}`,
+        contentType: file.contentType,
+        size: file.size,
+        expiresOn: expiresOn.toISOString(),
+      };
+    });
+
+    res.json({
+      ok: true,
+      files: sasUrls,
+    });
+  } catch (err) {
+    console.error("Generate batch SAS error:", err);
+    res
+      .status(500)
+      .json({ error: "Failed to generate SAS URLs", details: err.message });
+  }
+});
+
+/**
+ * GET /api/sas/config-status
+ * Check if Azure Blob Storage is properly configured
+ */
+router.get("/config-status", (req, res) => {
+  res.json({
+    configured: !!(blobServiceClient && accountName && accountKey),
+    accountName: accountName || "not set",
+    containerName: AZURE_CONTAINER_NAME,
+    hasConnectionString: !!CONNECTION_STRING,
+  });
 });
 
 export default router;

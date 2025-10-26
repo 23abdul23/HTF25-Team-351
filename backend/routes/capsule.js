@@ -1,5 +1,6 @@
 import express from "express";
 import multer from "multer";
+import jwt from "jsonwebtoken";
 import Capsule from "../models/Capsule.js";
 import { uploadBuffer, getSignedUrl, getFilesUrls } from "../services/azureBlob.js";
 
@@ -9,27 +10,35 @@ const upload = multer({
   limits: { fileSize: 200 * 1024 * 1024 },
 });
 
-// Enhanced token middleware that extracts userId
-function requireToken(req, res, next) {
-  const token = req.header("x-api-token") || req.query.token;
-  if (token !== process.env.SINGLE_USER_TOKEN) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
+// JWT
+function requireAuth(req, res, next) {
+  try {
+    const token =
+      req.cookies.token || req.header("Authorization")?.replace("Bearer ", "");
 
-  // Extract userId from header or query (you should use JWT or session in production)
-  req.userId = req.header("x-user-id") || req.query.userId;
-  if (!req.userId) {
-    return res.status(400).json({ error: "User ID required" });
-  }
+    if (!token) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
 
-  next();
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.userId = decoded.userId || decoded.id || decoded._id;
+
+    if (!req.userId) {
+      return res.status(401).json({ error: "Invalid token format" });
+    }
+
+    next();
+  } catch (err) {
+    console.error("Auth error:", err.message);
+    return res.status(401).json({ error: "Invalid or expired token" });
+  }
 }
 
 /**
  * POST /api/capsules
  * JSON flow (SAS): { title, description, unlockDate, recipients, visibility, blobs: [...] }
  */
-router.post("/", requireToken, express.json(), async (req, res) => {
+router.post("/", requireAuth, express.json(), async (req, res) => {
   try {
     const { title, description, unlockDate, recipients, visibility, blobs } =
       req.body;
@@ -37,14 +46,11 @@ router.post("/", requireToken, express.json(), async (req, res) => {
       return res.status(400).json({ error: "blobs array required" });
     }
 
-    // Validate recipients array
     const recipientList = Array.isArray(recipients) ? recipients : [];
 
-    // Validate blobs entries
     const savedFiles = [];
     for (const b of blobs) {
       if (!b || typeof b.blobName !== "string") continue;
-      // Ensure blobName matches our naming convention: /^\d+_.+/ or userId prefix
       if (!/^\d+_.+/.test(b.blobName) && !b.blobName.includes("/")) continue;
       savedFiles.push({
         originalName:
@@ -69,7 +75,7 @@ router.post("/", requireToken, express.json(), async (req, res) => {
       unlockDate: unlockDate ? new Date(unlockDate) : new Date(),
     });
 
-    res.json({ ok: true, id: capsule._id });
+    res.json({ ok: true, id: capsule._id, capsule });
   } catch (err) {
     console.error("Create capsule (SAS) error", err);
     res.status(500).json({ error: "Failed to create capsule" });
@@ -82,7 +88,7 @@ router.post("/", requireToken, express.json(), async (req, res) => {
  */
 router.post(
   "/upload",
-  requireToken,
+  requireAuth,
   upload.array("files", 20),
   async (req, res) => {
     try {
@@ -100,7 +106,6 @@ router.post(
 
       const savedFiles = [];
       for (const f of req.files) {
-        // Use userId in the blob path for organization
         const safeName = `${req.userId}/${Date.now()}_${f.originalname.replace(/\s+/g, "_")}`;
         const meta = await uploadBuffer(f.buffer, safeName, f.mimetype);
         savedFiles.push({
@@ -124,7 +129,7 @@ router.post(
 
       console.log("Capsule created with uploaded files:", capsule._id);
 
-      res.json({ ok: true, id: capsule._id });
+      res.json({ ok: true, id: capsule._id, capsule });
     } catch (err) {
       console.error("Create capsule (multipart) error", err);
       res.status(500).json({ error: "Failed to upload files" });
@@ -135,7 +140,7 @@ router.post(
 /**
  * GET /api/capsules  (list metadata - only accessible capsules)
  */
-router.get("/", requireToken, async (req, res) => {
+router.get("/", requireAuth, async (req, res) => {
   try {
     // Find capsules where user is creator or recipient
     const items = await Capsule.find({
@@ -176,9 +181,44 @@ router.get("/", requireToken, async (req, res) => {
 });
 
 /**
+ * GET /api/capsules/created  (list only capsules created by current user)
+ */
+router.get("/created", requireAuth, async (req, res) => {
+  try {
+    const items = await Capsule.find({ createdBy: req.userId })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    res.json(items);
+  } catch (err) {
+    console.error("List created capsules error", err);
+    res.status(500).json({ error: "Failed to fetch capsules" });
+  }
+});
+
+/**
+ * GET /api/capsules/received  (list only capsules where user is a recipient)
+ */
+router.get("/received", requireAuth, async (req, res) => {
+  try {
+    const items = await Capsule.find({
+      recipients: req.userId,
+      createdBy: { $ne: req.userId }, // Exclude capsules created by this user
+    })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    res.json(items);
+  } catch (err) {
+    console.error("List received capsules error", err);
+    res.status(500).json({ error: "Failed to fetch capsules" });
+  }
+});
+
+/**
  * GET /api/capsules/:id  (get signed URLs if unlocked and user has access)
  */
-router.get("/:id", requireToken, async (req, res) => {
+router.get("/:id", requireAuth, async (req, res) => {
   try {
     const cap = await Capsule.findById(req.params.id).lean();
     if (!cap) return res.status(404).json({ error: "Not found" });
@@ -194,7 +234,9 @@ router.get("/:id", requireToken, async (req, res) => {
     }
 
     // Check if capsule is unlocked
-    if (new Date(cap.unlockDate) > new Date()) {
+    const isUnlocked = new Date(cap.unlockDate) <= new Date();
+
+    if (!isUnlocked) {
       return res.json({
         unlocked: false,
         unlockDate: cap.unlockDate,
@@ -202,6 +244,9 @@ router.get("/:id", requireToken, async (req, res) => {
         description: cap.description,
         createdBy: cap.createdBy,
         recipients: cap.recipients,
+        visibility: cap.visibility,
+        fileCount: cap.files?.length || 0,
+        createdAt: cap.createdAt,
       });
     }
 
@@ -226,6 +271,7 @@ router.get("/:id", requireToken, async (req, res) => {
       visibility: cap.visibility,
       files: signedFiles,
       createdAt: cap.createdAt,
+      updatedAt: cap.updatedAt,
     });
   } catch (err) {
     console.error("Get capsule error", err);
@@ -234,9 +280,40 @@ router.get("/:id", requireToken, async (req, res) => {
 });
 
 /**
+ * PUT /api/capsules/:id (update capsule - only creator can update)
+ */
+router.put("/:id", requireAuth, express.json(), async (req, res) => {
+  try {
+    const { title, description, recipients, visibility, unlockDate } = req.body;
+
+    const cap = await Capsule.findById(req.params.id);
+    if (!cap) return res.status(404).json({ error: "Not found" });
+
+    // Only creator can update
+    if (cap.createdBy !== req.userId) {
+      return res.status(403).json({ error: "Only creator can update" });
+    }
+
+    // Update fields if provided
+    if (title !== undefined) cap.title = title;
+    if (description !== undefined) cap.description = description;
+    if (recipients !== undefined) cap.recipients = recipients;
+    if (visibility !== undefined) cap.visibility = visibility;
+    if (unlockDate !== undefined) cap.unlockDate = new Date(unlockDate);
+
+    await cap.save();
+
+    res.json({ ok: true, capsule: cap });
+  } catch (err) {
+    console.error("Update capsule error", err);
+    res.status(500).json({ error: "Failed to update capsule" });
+  }
+});
+
+/**
  * DELETE /api/capsules/:id (only creator can delete)
  */
-router.delete("/:id", requireToken, async (req, res) => {
+router.delete("/:id", requireAuth, async (req, res) => {
   try {
     const cap = await Capsule.findById(req.params.id);
     if (!cap) return res.status(404).json({ error: "Not found" });
