@@ -60,9 +60,9 @@ jobs:
         with:
           app-name: 'MemSky'
           slot-name: 'Production'
-          package: ./node-app
-
+          package: .
           
+
 
 
 
