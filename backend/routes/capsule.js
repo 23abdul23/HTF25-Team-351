@@ -111,7 +111,7 @@ router.post(
   upload.array("files", 20),
   async (req, res) => {
     try {
-      const { title, description, unlockDate, recipients, visibility } =
+      const { title, description, unlockDate, recipients, visibility , userId} =
         req.body;
       if (!req.files || !req.files.length)
         return res.status(400).json({ error: "No files uploaded" });
@@ -126,7 +126,7 @@ router.post(
       const savedFiles = [];
       for (const f of req.files) {
         // Use userId in the blob path for organization
-        const safeName = `${req.userId}/${Date.now()}_${f.originalname.replace(/\s+/g, "_")}`;
+        const safeName = `${userId}/${Date.now()}_${f.originalname.replace(/\s+/g, "_")}`;
         const meta = await uploadBuffer(f.buffer, safeName, f.mimetype);
         savedFiles.push({
           originalName: f.originalname,
@@ -140,7 +140,7 @@ router.post(
       const capsule = await Capsule.create({
         title: title || savedFiles.map((s) => s.originalName).join(", "),
         description,
-        createdBy: req.userId,
+        createdBy: userId,
         recipients: recipientList,
         visibility: visibility || "private",
         files: savedFiles,
@@ -163,7 +163,9 @@ router.post(
 router.get("/", requireToken, async (req, res) => {
   try {
     console.log("Listing all capsules metadata...");
-    const items = await Capsule.find().sort({ createdAt: -1 }).lean();
+    console.log(req.query)
+
+    const items = await Capsule.find({createdBy: req.query.userId}).sort({createdAt: -1 }).lean();
 
 
     // For each capsule, attach fileUrl to each file using getFilesUrls

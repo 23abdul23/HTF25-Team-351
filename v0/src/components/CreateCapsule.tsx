@@ -6,6 +6,7 @@ import { Textarea } from './ui/textarea';
 import { Label } from './ui/label';
 import { Input } from './ui/input';
 import axios from 'axios';
+import { getToken , getUser} from '../lib/auth';
 
 interface CreateCapsuleProps {
   onBack: () => void;
@@ -22,6 +23,9 @@ export function CreateCapsule({ onBack }: CreateCapsuleProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [isSealing, setIsSealing] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+
+
+  const user = getUser();
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -44,14 +48,27 @@ export function CreateCapsule({ onBack }: CreateCapsuleProps) {
   async function uploadToServer() {
     if (!files.length) return null;
     const formData = new FormData();
+
+
     files.forEach((f) => formData.append('files', f));
     if (memo) formData.append('description', memo);
     if (unlockDate) formData.append('unlockDate', unlockDate);
-    // Title derived from first filenames if you want; here we send none so server will default
+    if (user?.id) formData.append('userId', user.id);
+
+    // include auth token (Bearer) and optional single-user token header
+    const token = getToken();
+    const headers: Record<string, string> = {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(SINGLE_TOKEN ? { 'x-api-token': SINGLE_TOKEN } : {}),
+      // DO NOT set Content-Type here — the browser/axios will set multipart boundary
+    };
+
     try {
-      const res = await axios.post(`${API_BASE}/api/capsules/upload`, formData
-      );
-      
+      const res = await axios.post(`${API_BASE}/api/capsules/upload`, formData, {
+        headers,
+        withCredentials: true,
+      });
+
       console.log('Upload response:', res.data);
       return res.data;
     } catch (err: any) {
