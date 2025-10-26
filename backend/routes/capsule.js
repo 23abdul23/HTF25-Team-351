@@ -65,7 +65,7 @@ router.post("/", requireToken, express.json(), async (req, res) => {
 
     console.log("Create capsule:", req.body);
 
-    
+
     if (!Array.isArray(blobs) || blobs.length === 0) {
       return res.status(400).json({ error: "blobs array required" });
     }
@@ -255,7 +255,7 @@ router.post(
       for (const rid of recipientIds) {
         if (rid === creatorId) continue; // skip creator if in list
 
-        // const recipientEmail = idToEmail.get(rid);
+        const recipientEmail = idToEmail.get(rid);
         const otherRecipientEmails = recipientEmails.filter((e) => e !== recipientEmail);
         const sharedWith = [creatorEmail, ...otherRecipientEmails].filter(Boolean);
 
@@ -331,11 +331,12 @@ router.get("/community", requireToken, async (req, res) => {
     console.log(req.query)
     const userId = req.query.userId;
 
-    const items = await Capsule.find({ createdBy: userId, communityCapsule: true })
+    const items = await Capsule.find({ createdBy: userId})
       .sort({ createdAt: -1 })
       .lean();
 
-    console.log(items)
+    
+    console.log("community capsules: ", items)
 
     // For each capsule, attach fileUrl to each file using getFilesUrls
     const itemsWithFileUrls = await Promise.all(
