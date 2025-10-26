@@ -5,6 +5,7 @@ import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { Avatar, AvatarFallback } from './ui/avatar';
 import { getToken, getUser } from '../lib/auth';
+import { set } from 'mongoose';
 
 interface CommunityCapsule {
   id: number;
@@ -14,7 +15,9 @@ interface CommunityCapsule {
   lockDate?: Date | null;
   sharedCapsuleId?: string | null;
   createdBy?: any;
-  isUnlocked: boolean;
+  isActive?: boolean;
+  isLocked?: boolean;
+  isUnlocked?: boolean;
   files: Array<{ name: string; type: 'image' | 'video' | 'document'; fileUrl?: string; contentType?: string }>;
   memo: string;
   angle: number;
@@ -40,7 +43,6 @@ export function CommunityCapsules({ onBack }: CommunityCapsulesProps) {
 
   useEffect(() => {
     const now = new Date();
-    // default lockDate to now+1 day, default unlockDate to slightly in the past so new capsules are open
     const localISONow = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
     const localISONowMinus1Min = new Date(now.getTime() - 60_000 - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
     const localISONextDay = new Date(now.getTime() + 24 * 60 * 60 * 1000 - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
@@ -59,7 +61,12 @@ export function CommunityCapsules({ onBack }: CommunityCapsulesProps) {
   // recipients (emails) state + input
   const [recipientsInput, setRecipientsInput] = useState('');
   const [recipients, setRecipients] = useState<string[]>([]);
-
+  
+  const [capsules, setCapsules] = useState<CommunityCapsule[]>([]);
+  const [uploadFiles, setUploadFiles] = useState<File[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  
+  
   function normalizeEmailsInput(raw: string) {
     return raw
       .split(/[\s,;]+/)
@@ -84,9 +91,6 @@ export function CommunityCapsules({ onBack }: CommunityCapsulesProps) {
     setRecipients((r) => r.filter((x) => x !== email));
   }
 
-  const [capsules, setCapsules] = useState<CommunityCapsule[]>([]);
-  const [uploadFiles, setUploadFiles] = useState<File[]>([]);
-  const [isUploading, setIsUploading] = useState(false);
   
   let mounted = true;
   const fetchData = async () => {
@@ -109,32 +113,66 @@ export function CommunityCapsules({ onBack }: CommunityCapsulesProps) {
       const data = body?.data || body || [];
 
       if (!mounted) return;
+      const normalized = (data || []).map((c: any, idx: number) => {
+        const now = new Date();
+        const parsedUnlock = c.unlockDate ? new Date(c.unlockDate) : null;
+        const parsedLock = c.lockDate ? new Date(c.lockDate) : null;
 
-      const normalized = (data || []).map((c: any, idx: number) => ({
-        id: c._id || c.id || idx,
-        pilotName: c.pilotName || c.creatorName || c.createdByEmail || (c.createdBy && c.createdBy.email) || 'Unknown',
-        title: c.title || c.name || '',
-        unlockDate: c.unlockDate ? new Date(c.unlockDate) : null,
-        lockDate : c.lockDate ? new Date(c.lockDate) : null, 
-        sharedCapsuleId: c.sharedCapsuleId || null,
-        createdBy: c.createdBy || null,
-        isUnlocked: c.unlockDate ? new Date(c.unlockDate) <= new Date() : true,
-        files: (c.files || []).map((f: any) => ({
-          name: f.originalName || f.name || f.blobName || 'file',
-          type: (f.contentType || '').startsWith('image')
-            ? 'image'
-            : (f.contentType || '').startsWith('video')
-              ? 'video'
-              : 'document',
-          fileUrl: f.fileUrl || f.url || f.sasUrl || null,
-        })),
-        memo: c.description || c.memo || '',
-        angle: c.angle || 0,
-      }));
+  
+        let isActive = false;
+        let isLocked = false;
+        let isUnlocked = false;
+
+        if (parsedLock && parsedUnlock) {
+          if (now < parsedLock) {
+            isActive = true;
+          } else if (now > parsedLock && now <= parsedUnlock) {
+            isLocked = true;
+          } else if (now > parsedUnlock) {
+            isUnlocked = true;
+          }
+        } else if (parsedLock && !parsedUnlock) {
+          // no unlockDate: active until lockDate, then unlocked afterwards
+          if (now < parsedLock) isActive = true;
+          else isUnlocked = true;
+        } else if (!parsedLock && parsedUnlock) {
+          // no lockDate: consider before unlock as locked, after unlock as unlocked
+          if (now > parsedUnlock) isUnlocked = true;
+          else isLocked = true;
+        } else {
+          // no dates: default to unlocked
+          isUnlocked = true;
+        }
+
+        return {
+          id: c._id,
+          title: c.title || c.name || '',
+          unlockDate: parsedUnlock,
+          lockDate: parsedLock,
+          sharedCapsuleId: c.sharedCapsuleId || null,
+          createdBy: c.createdBy || null,
+          // keep legacy flags for UI consistency
+          isActive,
+          isLocked,
+          isUnlocked,
+          files: (c.files || []).map((f: any) => ({
+            name: f.originalName || f.name || f.blobName || 'file',
+            type: (f.contentType || '').startsWith('image')
+              ? 'image'
+              : (f.contentType || '').startsWith('video')
+                ? 'video'
+                : 'document',
+            fileUrl: f.fileUrl || null,
+          })),
+          memo: c.description || c.memo || '',
+          angle: c.angle || 0,
+        };
+      });
 
       setCapsules(normalized);
 
-      console.log(data)
+      console.log('Fetched community capsules', normalized);
+
     } catch (err) {
       console.error('Failed to fetch capsules', err);
     }
@@ -147,8 +185,17 @@ export function CommunityCapsules({ onBack }: CommunityCapsulesProps) {
     };
   }, []);
 
+  // refresh data every minute to keep capsule states up-to-date (active/locked/unlocked)
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      fetchData();
+    }, 60_000); // 60 seconds
+    return () => clearInterval(intervalId);
+  }, []);
+
   const handleCapsuleClick = (capsule: CommunityCapsule) => {
-    if (!capsule.isUnlocked) return;
+    // allow opening when active (uploads allowed) or unlocked (open to view)
+    if (!(capsule.isActive || capsule.isUnlocked)) return;
 
     setIsTransitioning(true);
     setTimeout(() => {
@@ -160,22 +207,34 @@ export function CommunityCapsules({ onBack }: CommunityCapsulesProps) {
   // Create -> POST /api/capsules/upload (multipart)
   async function createCommunityCapsule() {
     setCreateError(null);
+
     if (!title && !memo && files.length === 0) {
       setCreateError('Please provide a title, memo or at least one file.');
       return;
     }
 
+    // validate lock/unlock relationship: lockDate must be <= unlockDate
+    if (lockDate && unlockDate) {
+      const parsedLock = new Date(lockDate);
+      const parsedUnlock = new Date(unlockDate);
+      if (isNaN(parsedLock.getTime()) || isNaN(parsedUnlock.getTime())) {
+        setCreateError('Invalid lock/unlock date.');
+        return;
+      }
+      if (parsedLock > parsedUnlock) {
+        setCreateError('Lock date must be on or before the Unlock date.');
+        return;
+      }
+    }
++
     setIsCreating(true);
     try {
       const form = new FormData();
       form.append('title', title);
       form.append('description', memo);
-
       if (unlockDate) form.append('unlockDate', new Date(unlockDate).toISOString());
       if (lockDate) form.append('lockDate', new Date(lockDate).toISOString());
-
       form.append('visibility', 'public'); // community capsules should be public
-
       form.append('user', getUser())
       form.append('userId', getUser().id);
 
@@ -204,12 +263,13 @@ export function CommunityCapsules({ onBack }: CommunityCapsulesProps) {
       setTitle('');
       setMemo('');
       setUnlockDate('');
+      setLockDate('');
       setFiles([]);
       setRecipients([]);
       setRecipientsInput('');
       // optional: show created id
-      console.log('Community capsule created', body);
 
+      fetchData()
       // You may want to refresh community list from backend here
     } catch (err: any) {
       console.error('Create capsule error', err);
@@ -272,9 +332,9 @@ export function CommunityCapsules({ onBack }: CommunityCapsulesProps) {
       if (refetchRes.ok) {
         const refData = refetchBody?.data || refetchBody || [];
         const normalized = (refData || []).map((c: any, idx: number) => ({
-          id: c._id || c.id || idx,
+          id: c._id,
           pilotName: c.pilotName || c.creatorName || c.createdByEmail || (c.createdBy && c.createdBy.email) || 'Unknown',
-          title: c.title || c.name || '',
+          title: c.title ||'',
           unlockDate: c.unlockDate ? new Date(c.unlockDate) : new Date(),
           sharedCapsuleId: c.sharedCapsuleId || null,
           createdBy: c.createdBy || null,
@@ -288,6 +348,7 @@ export function CommunityCapsules({ onBack }: CommunityCapsulesProps) {
           angle: c.angle || 0,
         }));
         setCapsules(normalized);
+        fetchData()
       }
 
       setUploadFiles([]);
@@ -297,6 +358,32 @@ export function CommunityCapsules({ onBack }: CommunityCapsulesProps) {
       setCreateError(err?.message || "Upload failed");
     } finally {
       setIsUploading(false);
+    }
+  }
+
+  // Delete a capsule (current user's copy). backend should accept DELETE /api/capsules/:id
+  async function deleteCapsule(id: string | number) {
+    try {
+      if (!confirm('Delete this capsule for your account? This cannot be undone.')) return;
+      const token = getToken();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+      const res = await fetch(`${API_BASE}/api/capsules/${id}`, {
+        method: 'DELETE',
+        headers,
+        credentials: 'include',
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(body?.error || 'Failed to delete capsule');
+
+      // remove from UI
+      setCapsules((prev) => prev.filter((c) => String(c.id) !== String(id)));
+      if (selectedCapsule && String((selectedCapsule as any).id) === String(id)) {
+        setSelectedCapsule(null);
+      }
+      console.log('Deleted capsule', id);
+    } catch (err: any) {
+      console.error('Delete capsule error', err);
+      alert(err?.message || 'Failed to delete capsule');
     }
   }
 
@@ -356,11 +443,17 @@ export function CommunityCapsules({ onBack }: CommunityCapsulesProps) {
               ← Back to Home
             </Button>
 
-            <div className="flex items-center gap-3">
-              <Button onClick={() => setShowCreate(true)} className="bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300">
-                + Create Capsule
-              </Button>
-            </div>
+            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <Button
+              onClick={() => setShowCreate(true)}
+              className="bg-cyan-500/10 text-cyan-300 border border-cyan-400/20 rounded-xl px-4 py-2 
+                        hover:bg-cyan-500/30 hover:shadow-[0_0_20px_rgba(34,211,238,0.6)] transition-all"
+            >
+              + Create Capsule
+            </Button>
+          </motion.div>
+
+
           </div>
 
           <h1 className="text-5xl bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent mb-2 flex items-center gap-3">
@@ -406,7 +499,7 @@ export function CommunityCapsules({ onBack }: CommunityCapsulesProps) {
              // evenly distribute angles when more than one capsule
              const angleDeg = total > 1 ? (index * 360) / total : (capsule.angle || 0);
              const angleRad = (angleDeg * Math.PI) / 180;
-             const radius = 350; // adjust as needed or compute based on total
+             const radius = 300; // adjust as needed or compute based on total
              const x = Math.cos(angleRad) * radius;
              const y = Math.sin(angleRad) * radius;
 
@@ -425,10 +518,28 @@ export function CommunityCapsules({ onBack }: CommunityCapsulesProps) {
                >
                 {/* wrapper with hover group so we can show unlock tooltip for locked capsules */}
                 <div className="relative group inline-block">
-                  <motion.div
-                    whileHover={{ scale: 1.05 }}
-                    onClick={() => handleCapsuleClick(capsule)}
-                    className={`glass p-4 rounded-xl cursor-pointer ${capsule.isUnlocked ? 'neon-cyan' : 'neon-purple opacity-60'}`}
+                  {/* delete button - small red cross top-right */}
+                  <button
+                    type="button"
+                    title="Delete capsule"
+                    onClick={(e) => { e.stopPropagation(); deleteCapsule(capsule.id); }}
+                    className="absolute -top-2 -right-2 z-50 w-6 h-6 rounded-full bg-red-600 text-white flex items-center justify-center text-xs shadow-md hover:bg-red-500"
+                  >
+                    ×
+                  </button>
+                   <motion.div
+                     whileHover={{ scale: 1.05 }}
+                     onClick={() => handleCapsuleClick(capsule)}
+                     className={`
+                      glass p-4 rounded-xl cursor-pointer transition-all duration-300
+                      ${
+                        capsule.isActive
+                        ? 'neon-green hover:shadow-[0_0_30px_rgba(74,222,128,0.7)]'
+                        : capsule.isUnlocked
+                        ? 'neon-cyan hover:shadow-[0_0_20px_rgba(34,211,238,0.4)]'
+                        : 'neon-purple opacity-60 hover:shadow-[0_0_20px_rgba(192,132,252,0.3)]'
+                      }
+                    `}
                   >
                     <div className="flex flex-col items-center gap-2 w-32">
                       <Avatar className="w-12 h-12 glass border-2 border-cyan-400/50">
@@ -441,16 +552,46 @@ export function CommunityCapsules({ onBack }: CommunityCapsulesProps) {
                       </Avatar>
 
                       <div className="text-center">
-                        <p className={`text-sm mb-2 ${capsule.isUnlocked ? 'text-cyan-400' : 'text-purple-400'}`}>
+                        <p className={`text-sm mb-2 ${capsule.isActive ? 'text-green-400' : capsule.isUnlocked ? 'text-cyan-400' : 'text-purple-400'}`}>
                           {capsule.title}
                         </p>
-
+                        <p className={`text-xs ${capsule.isActive ? 'text-green-400' : capsule.isUnlocked ? 'text-cyan-400' : 'text-purple-400'}`}>
+                          {capsule.isActive
+                            ? 'Active (uploads allowed)'
+                            : capsule.isUnlocked
+                            ? 'Unlocked (open to view)'
+                            : 'Locked (waiting period)'}
+                        </p>
                         <div className="flex items-center justify-center gap-1 text-xs">
-                          <Clock className={`w-3 h-3 ${capsule.isUnlocked ? 'text-cyan-400' : 'text-purple-400 animate-pulse-glow'}`} />
-                          <span className={capsule.isUnlocked ? 'text-cyan-300/70' : 'text-purple-300/70'}>
-                            {capsule.isUnlocked ? 'Open' : 'Locked'}
-                          </span>
+                          {(() => {
+                            if (capsule.isActive) {
+                              // 🟢 Active (uploads allowed)
+                              return (
+                                <>
+                                  <Clock className="w-3 h-3 text-green-400 animate-pulse-glow" />
+                                  <span className="text-green-300/70">Active</span>
+                                </>
+                              );
+                            } else if (capsule.isUnlocked) {
+                              // 🔵 Unlocked (open to view)
+                              return (
+                                <>
+                                  <Clock className="w-3 h-3 text-cyan-400" />
+                                  <span className="text-cyan-300/70">Open</span>
+                                </>
+                              );
+                            } else {
+                              // 🟣 Locked (waiting period)
+                              return (
+                                <>
+                                  <Clock className="w-3 h-3 text-purple-400 animate-pulse-glow" />
+                                  <span className="text-purple-300/70">Locked</span>
+                                </>
+                              );
+                            }
+                          })()}
                         </div>
+
                       </div>
 
                       {capsule.isUnlocked && (
@@ -611,9 +752,9 @@ export function CommunityCapsules({ onBack }: CommunityCapsulesProps) {
                     </div>
                   </div>
                 </div>
-
+                
                 {/* upload area visible while capsule is still open (before lockDate) */}
-                {selectedCapsule && selectedCapsule.lockDate && new Date() < new Date(selectedCapsule.lockDate) && (
+                {selectedCapsule.isActive && (
                   <div className="mb-3">
                     <label className="text-sm text-cyan-300 block mb-1">Add your files (available until lock date)</label>
                     <div className="flex items-center gap-2">
@@ -632,6 +773,11 @@ export function CommunityCapsules({ onBack }: CommunityCapsulesProps) {
                     </div>
                     <p className="text-xs text-cyan-300/60 mt-2">
                       You can add files here until {new Date(selectedCapsule.lockDate!).toLocaleString()}.
+                    </p>
+                    {/* Bright red lock date line */}
+                    <p className="text-sm text-red-500 font-semibold mt-1">
+                      {console.log("date lock:", selectedCapsule.lockDate.toLocaleString())}
+                      Lock deadline: {new Date(selectedCapsule.lockDate!).toLocaleString()}
                     </p>
                   </div>
                 )}
