@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from "react";
-import "../App.css";
-const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5000";
+import React, { useEffect, useState } from 'react'
+import '../App.css'
+const API_BASE = import.meta.env.VITE_HOSTED_BACKEND_URL || 'http://localhost:5000'
 
 type User = { id: string; email: string; name?: string; avatarUrl?: string };
 

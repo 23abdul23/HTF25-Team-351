@@ -12,7 +12,7 @@ interface CreateCapsuleProps {
   onBack: () => void;
 }
 
-const API_BASE = import.meta.env.VITE_API_BASE || import.meta.env.NEXT_BACKEND_URL || 'http://localhost:5000';
+const API_BASE = import.meta.env.VITE_HOSTED_BACKEND_URL || import.meta.env.NEXT_BACKEND_URL || 'http://localhost:5000';
 const SINGLE_TOKEN = import.meta.env.VITE_SINGLE_USER_TOKEN || '';
 
 export function CreateCapsule({ onBack }: CreateCapsuleProps) {

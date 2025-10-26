@@ -256,7 +256,7 @@ router.post(
         sharedWith: recipientIds, // recipients that can access
       };
 
-      console.log("Community: ", creatorDoc);
+      console.log('Community: ', creatorDoc);
 
       const createdForCreator = await Capsule.create(creatorDoc);
       createdIds.push(String(createdForCreator._id));

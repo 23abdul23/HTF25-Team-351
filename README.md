@@ -37,5 +37,23 @@ npm run dev
 - Server: http://localhost:3000
 - Client: http://localhost:5173
 
+## Client config
+
+Optionally create `client/.env` with:
+
+```
+VITE_HOSTED_BACKEND_URL=http://localhost:4000
+```
+
+## API summary
+
+- POST /api/auth/register {email,password,name}
+- POST /api/auth/login {email,password}
+- POST /api/auth/logout
+- GET /api/auth/me (cookie required)
+- GET /api/auth/google -> redirects to Google
+- GET /api/auth/google/callback -> sets cookie and redirects back to client
+
+## Notes
 
 And the project is up. 

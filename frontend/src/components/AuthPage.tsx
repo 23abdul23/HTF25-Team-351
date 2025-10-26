@@ -11,7 +11,7 @@ interface AuthPageProps {
   onAuthenticated: () => void;
 }
 
-const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5000";
+const API_BASE = import.meta.env.VITE_HOSTED_BACKEND_URL || 'http://localhost:5000';
 
 async function api(path: string, init?: RequestInit) {
   const res = await fetch(`${API_BASE}/api${path}`, {

@@ -147,6 +147,7 @@ export function FriendsPlanets({ onBack }: FriendsPlanetsProps) {
 
   return (
     <div className="min-h-screen px-4 py-8 relative overflow-hidden">
+    
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <motion.div
@@ -169,7 +170,7 @@ export function FriendsPlanets({ onBack }: FriendsPlanetsProps) {
         </motion.div>
 
         {/* Solar System View */}
-        <div className="relative h-[700px] glass rounded-3xl neon-purple p-8">
+        <div className="relative h-[700px]  rounded-3xl neon-purple p-8">
           {/* Background stars */}
           {[...Array(30)].map((_, i) => (
             <motion.div
@@ -208,16 +209,16 @@ export function FriendsPlanets({ onBack }: FriendsPlanetsProps) {
                   className="relative cursor-pointer group"
                 >
                   {/* Planet glow */}
-                  <div className={`absolute inset-0 bg-gradient-to-br ${friend.planetColor} rounded-full blur-xl opacity-50 group-hover:opacity-70 transition-opacity`} />
+                  {/* <div className={`absolute inset-0 bg-gradient-to-br ${friend.planetColor} rounded-full blur-xl opacity-50 group-hover:opacity-70 transition-opacity`} /> */}
                   
                   {/* Planet body */}
-                  <div className="relative w-32 h-32 rounded-full overflow-hidden glass border-2 border-white/20">
+                  <div className="relative w-32 h-32 rounded-full overflow-hidden glass">
                     <ImageWithFallback
                       src={friend.planetImage}
                       alt={friend.name}
                       className="w-full h-full object-cover"
                     />
-                    <div className={`absolute inset-0 bg-gradient-to-br ${friend.planetColor} opacity-40`} />
+                    {/* <div className={`absolute inset-0 bg-gradient-to-br ${friend.planetColor} opacity-40`} /> */}
                   </div>
 
                   {/* Pilot info */}
@@ -230,7 +231,7 @@ export function FriendsPlanets({ onBack }: FriendsPlanetsProps) {
                   <motion.div
                     animate={{ rotate: 360 }}
                     transition={{ duration: 30, repeat: Infinity, ease: "linear" }}
-                    className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 border border-white/10 rounded-full"
+                    className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
                     style={{ 
                       width: `${orbitRadius * 2}px`, 
                       height: `${orbitRadius * 2}px` 

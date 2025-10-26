@@ -24,7 +24,7 @@ interface CommunityCapsulesProps {
   onBack: () => void;
 }
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
+const API_BASE = import.meta.env.VITE_HOSTED_BACKEND_URL || 'http://localhost:5000';
 
 export function CommunityCapsules({ onBack }: CommunityCapsulesProps) {
   const [selectedCapsule, setSelectedCapsule] = useState<CommunityCapsule | null>(null);
@@ -187,7 +187,7 @@ export function CommunityCapsules({ onBack }: CommunityCapsulesProps) {
       const headers: Record<string, string> = {};
       if (token) headers['Authorization'] = `Bearer ${token}`;
 
-      const res = await fetch(`${import.meta.env.VITE_API_BASE || 'http://localhost:5000'}/api/capsules/community/create`, {
+      const res = await fetch(`${import.meta.env.VITE_HOSTED_BACKEND_URL || 'http://localhost:5000'}/api/capsules/community/create`, {
         method: 'POST',
         headers,
         credentials: 'include',
