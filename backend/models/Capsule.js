@@ -14,6 +14,7 @@ const capsuleSchema = new mongoose.Schema(
   {
     title: { type: String, required: true },
     description: { type: String, default: "" },
+    userId: { type: String, index: true },
     createdBy: { type: String, required: true, index: true },
     recipients: [{ type: String, index: true }],
     visibility: {
@@ -23,6 +24,10 @@ const capsuleSchema = new mongoose.Schema(
     },
     files: [fileSchema],
     unlockDate: { type: Date, required: true, index: true },
+    communityCapsule: { type: Boolean, default: false },
+    sharedWith: [{ type: String, index: true }],
+    sharedCapsuleId : {type : String},
+    visibility: { type: String, enum: ["private", "shared", "public"], default: "private" },
   },
   {
     timestamps: true,

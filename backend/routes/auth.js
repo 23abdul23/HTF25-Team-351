@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
-import { User } from '../models/User.js';
+import User from '../models/User.js';
 import { signJwt } from '../lib/jwt.js';
 import { getUserFromReq, requireAuth } from '../middleware/authentication.js';
 import { googleAuthStart, googleAuthCallback } from '../lib/passport-google.js';
