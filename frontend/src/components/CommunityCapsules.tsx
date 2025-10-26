@@ -10,9 +10,12 @@ interface CommunityCapsule {
   id: number;
   pilotName: string;
   title: string;
-  unlockDate: Date;
+  unlockDate: Date | null;
+  lockDate?: Date | null;
+  sharedCapsuleId?: string | null;
+  createdBy?: any;
   isUnlocked: boolean;
-  files: Array<{ name: string; type: 'image' | 'video' | 'document'; fileUrl?: string }>;
+  files: Array<{ name: string; type: 'image' | 'video' | 'document'; fileUrl?: string; contentType?: string }>;
   memo: string;
   angle: number;
 }
@@ -31,18 +34,21 @@ export function CommunityCapsules({ onBack }: CommunityCapsulesProps) {
   const [showCreate, setShowCreate] = useState(false);
   const [title, setTitle] = useState('');
   const [memo, setMemo] = useState('');
-  
+
   const [unlockDate, setUnlockDate] = useState('');
   const [lockDate, setLockDate] = useState('');
 
   useEffect(() => {
     const now = new Date();
-    // Convert to the format required by datetime-local: "YYYY-MM-DDTHH:MM"
-    const localISOTime = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
-      .toISOString()
-      .slice(0, 16);
-    setUnlockDate(localISOTime);
-    setLockDate(localISOTime);
+    // default lockDate to now+1 day, default unlockDate to slightly in the past so new capsules are open
+    const localISONow = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    const localISONowMinus1Min = new Date(now.getTime() - 60_000 - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    const localISONextDay = new Date(now.getTime() + 24 * 60 * 60 * 1000 - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+
+    // unlockDate default: 1 minute in the past (ensures isUnlocked true)
+    setUnlockDate(localISONowMinus1Min);
+    // lockDate default: next day (uploads allowed until then)
+    setLockDate(localISONextDay);
   }, []);
 
   const [files, setFiles] = useState<File[]>([]);
@@ -81,59 +87,60 @@ export function CommunityCapsules({ onBack }: CommunityCapsulesProps) {
   const [capsules, setCapsules] = useState<CommunityCapsule[]>([]);
   const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  
+  let mounted = true;
+  const fetchData = async () => {
+    try {
+      const token = getToken();
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      };
 
-  useEffect(() => {
-    let mounted = true;
-    const fetchData = async () => {
-      try {
-        const token = getToken();
-        const headers: Record<string, string> = {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        };
-
-        const res = await fetch(`${API_BASE}/api/capsules/community?userId=${getUser()?.id}`, {
-          method: 'GET',
-          headers,
-          credentials: 'include',
-        });
+      const res = await fetch(`${API_BASE}/api/capsules/community?userId=${getUser()?.id}`, {
+        method: 'GET',
+        headers,
+        credentials: 'include',
+      });
 
 
-        const body = await res.json().catch(() => null);
-        if (!res.ok) throw new Error(body?.error || 'Failed to fetch community capsules');
-        const data = body?.data || body || [];
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(body?.error || 'Failed to fetch community capsules');
+      const data = body?.data || body || [];
 
-        if (!mounted) return;
+      if (!mounted) return;
 
-        const normalized = (data || []).map((c: any, idx: number) => ({
-          id: c._id || c.id || idx,
-          pilotName: c.pilotName || c.creatorName || c.createdByEmail || (c.createdBy && c.createdBy.email) || 'Unknown',
-          title: c.title || c.name || '',
-          unlockDate: c.unlockDate ? new Date(c.unlockDate) : new Date(),
-          sharedCapsuleId: c.sharedCapsuleId || null,
-          createdBy: c.createdBy || null,
-          isUnlocked: c.unlockDate ? new Date(c.unlockDate) <= new Date() : true,
-          files: (c.files || []).map((f: any) => ({
-            name: f.originalName || f.name || f.blobName || 'file',
-            type: (f.contentType || '').startsWith('image')
-              ? 'image'
-              : (f.contentType || '').startsWith('video')
+      const normalized = (data || []).map((c: any, idx: number) => ({
+        id: c._id || c.id || idx,
+        pilotName: c.pilotName || c.creatorName || c.createdByEmail || (c.createdBy && c.createdBy.email) || 'Unknown',
+        title: c.title || c.name || '',
+        unlockDate: c.unlockDate ? new Date(c.unlockDate) : null,
+        lockDate : c.lockDate ? new Date(c.lockDate) : null, 
+        sharedCapsuleId: c.sharedCapsuleId || null,
+        createdBy: c.createdBy || null,
+        isUnlocked: c.unlockDate ? new Date(c.unlockDate) <= new Date() : true,
+        files: (c.files || []).map((f: any) => ({
+          name: f.originalName || f.name || f.blobName || 'file',
+          type: (f.contentType || '').startsWith('image')
+            ? 'image'
+            : (f.contentType || '').startsWith('video')
               ? 'video'
               : 'document',
-            fileUrl: f.fileUrl || f.url || f.sasUrl || null,
-          })),
-          memo: c.description || c.memo || '',
-          angle: c.angle || 0,
-        }));
+          fileUrl: f.fileUrl || f.url || f.sasUrl || null,
+        })),
+        memo: c.description || c.memo || '',
+        angle: c.angle || 0,
+      }));
 
-        setCapsules(normalized);
+      setCapsules(normalized);
 
-        console.log(data)
-      } catch (err) {
-        console.error('Failed to fetch capsules', err);
-      }
-    };
+      console.log(data)
+    } catch (err) {
+      console.error('Failed to fetch capsules', err);
+    }
+  };
 
+  useEffect(() => {
     fetchData();
     return () => {
       mounted = false;
@@ -163,7 +170,7 @@ export function CommunityCapsules({ onBack }: CommunityCapsulesProps) {
       const form = new FormData();
       form.append('title', title);
       form.append('description', memo);
-      
+
       if (unlockDate) form.append('unlockDate', new Date(unlockDate).toISOString());
       if (lockDate) form.append('lockDate', new Date(lockDate).toISOString());
 
@@ -395,74 +402,89 @@ export function CommunityCapsules({ onBack }: CommunityCapsulesProps) {
 
           {/* Orbiting Capsules */}
           {capsules.map((capsule, index) => {
-            const total = Math.max(1, capsules.length);
-            // evenly distribute angles when more than one capsule
-            const angleDeg = total > 1 ? (index * 360) / total : (capsule.angle || 0);
-            const angleRad = (angleDeg * Math.PI) / 180;
-            const radius = 350; // adjust as needed or compute based on total
-            const x = Math.cos(angleRad) * radius;
-            const y = Math.sin(angleRad) * radius;
+             const total = Math.max(1, capsules.length);
+             // evenly distribute angles when more than one capsule
+             const angleDeg = total > 1 ? (index * 360) / total : (capsule.angle || 0);
+             const angleRad = (angleDeg * Math.PI) / 180;
+             const radius = 350; // adjust as needed or compute based on total
+             const x = Math.cos(angleRad) * radius;
+             const y = Math.sin(angleRad) * radius;
 
-            return (
-              <motion.div
-                key={capsule.id}
-                initial={{ opacity: 0, scale: 0 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: index * 0.06 }}
-                className="absolute"
-                style={{
-                  left: `calc(50% + ${x}px)`,
-                  top: `calc(50% + ${y}px)`,
-                  transform: 'translate(-50%, -50%)',
-                }}
-              >
-                <motion.div
-                  whileHover={{ scale: 1.05 }}
-                  onClick={() => handleCapsuleClick(capsule)}
-                  className={`glass p-4 rounded-xl cursor-pointer ${capsule.isUnlocked ? 'neon-cyan' : 'neon-purple opacity-60'}`}
-                >
-                  <div className="flex flex-col items-center gap-2 w-32">
-                    <Avatar className="w-12 h-12 glass border-2 border-cyan-400/50">
-                      <AvatarFallback className="bg-gradient-to-br from-cyan-500/20 to-purple-500/20 text-cyan-400">
-                        {capsule.pilotName.split(' ').map(n => n[0]).join('')}
-                      </AvatarFallback>
-                    </Avatar>
+             return (
+               <motion.div
+                 key={capsule.id}
+                 initial={{ opacity: 0, scale: 0 }}
+                 animate={{ opacity: 1, scale: 1 }}
+                 transition={{ delay: index * 0.06 }}
+                 className="absolute"
+                 style={{
+                   left: `calc(50% + ${x}px)`,
+                   top: `calc(50% + ${y}px)`,
+                   transform: 'translate(-50%, -50%)',
+                 }}
+               >
+                {/* wrapper with hover group so we can show unlock tooltip for locked capsules */}
+                <div className="relative group inline-block">
+                  <motion.div
+                    whileHover={{ scale: 1.05 }}
+                    onClick={() => handleCapsuleClick(capsule)}
+                    className={`glass p-4 rounded-xl cursor-pointer ${capsule.isUnlocked ? 'neon-cyan' : 'neon-purple opacity-60'}`}
+                  >
+                    <div className="flex flex-col items-center gap-2 w-32">
+                      <Avatar className="w-12 h-12 glass border-2 border-cyan-400/50">
+                        <AvatarFallback className="bg-gradient-to-br from-cyan-500/20 to-purple-500/20 text-cyan-400">
+                          {String(capsule.pilotName || '')
+                            .split(' ')
+                            .map((n) => n[0] || '')
+                            .join('')}
+                        </AvatarFallback>
+                      </Avatar>
 
-                    <div className="text-center">
-                      <p className={`text-xs mb-1 ${capsule.isUnlocked ? 'text-cyan-300' : 'text-purple-300'}`}>
-                        {capsule.pilotName}
-                      </p>
-                      <p className={`text-sm mb-2 ${capsule.isUnlocked ? 'text-cyan-400' : 'text-purple-400'}`}>
-                        {capsule.title}
-                      </p>
+                      <div className="text-center">
+                        <p className={`text-sm mb-2 ${capsule.isUnlocked ? 'text-cyan-400' : 'text-purple-400'}`}>
+                          {capsule.title}
+                        </p>
 
-                      <div className="flex items-center justify-center gap-1 text-xs">
-                        <Clock className={`w-3 h-3 ${capsule.isUnlocked ? 'text-cyan-400' : 'text-purple-400 animate-pulse-glow'}`} />
-                        <span className={capsule.isUnlocked ? 'text-cyan-300/70' : 'text-purple-300/70'}>
-                          {capsule.isUnlocked ? 'Open' : 'Locked'}
-                        </span>
+                        <div className="flex items-center justify-center gap-1 text-xs">
+                          <Clock className={`w-3 h-3 ${capsule.isUnlocked ? 'text-cyan-400' : 'text-purple-400 animate-pulse-glow'}`} />
+                          <span className={capsule.isUnlocked ? 'text-cyan-300/70' : 'text-purple-300/70'}>
+                            {capsule.isUnlocked ? 'Open' : 'Locked'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {capsule.isUnlocked && (
+                        <motion.div animate={{ scale: [1, 1.15, 1] }} transition={{ duration: 2, repeat: Infinity }}>
+                          <Zap className="w-4 h-4 text-cyan-400" />
+                        </motion.div>
+                      )}
+                    </div>
+                  </motion.div>
+
+                  {/* unlock date tooltip for locked capsules (becomes visible on hover) */}
+                  {!capsule.isUnlocked && capsule.unlockDate && (
+                    <div
+                      className="pointer-events-none absolute left-1/2 transform -translate-x-1/2 bottom-full mb-3 opacity-0 translate-y-2 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-150 z-50"
+                      aria-hidden
+                    >
+                      <div className="bg-black/90 text-xs text-white px-3 py-1 rounded-md whitespace-nowrap shadow-lg">
+                        Unlocks: {new Date(capsule.unlockDate).toLocaleString()}
                       </div>
                     </div>
+                  )}
+                </div>
 
-                    {capsule.isUnlocked && (
-                      <motion.div animate={{ scale: [1, 1.15, 1] }} transition={{ duration: 2, repeat: Infinity }}>
-                        <Zap className="w-4 h-4 text-cyan-400" />
-                      </motion.div>
-                    )}
-                  </div>
-                </motion.div>
-
-                {/* Connection line to station */}
-                <div
-                  className="absolute top-1/2 left-1/2 h-px bg-gradient-to-r from-transparent via-cyan-400/30 to-transparent"
-                  style={{
-                    width: `${radius}px`,
-                    transform: `rotate(${angleDeg + 180}deg)`,
-                    transformOrigin: 'left center',
-                  }}
-                />
-              </motion.div>
-            );
+                 {/* Connection line to station */}
+                 <div
+                   className="absolute top-1/2 left-1/2 h-px bg-gradient-to-r from-transparent via-cyan-400/30 to-transparent"
+                   style={{
+                     width: `${radius}px`,
+                     transform: `rotate(${angleDeg + 180}deg)`,
+                     transformOrigin: 'left center',
+                   }}
+                 />
+               </motion.div>
+             );
           })}
         </div>
 
@@ -589,6 +611,30 @@ export function CommunityCapsules({ onBack }: CommunityCapsulesProps) {
                     </div>
                   </div>
                 </div>
+
+                {/* upload area visible while capsule is still open (before lockDate) */}
+                {selectedCapsule && selectedCapsule.lockDate && new Date() < new Date(selectedCapsule.lockDate) && (
+                  <div className="mb-3">
+                    <label className="text-sm text-cyan-300 block mb-1">Add your files (available until lock date)</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="file"
+                        multiple
+                        onChange={(e) => setUploadFiles(Array.from(e.target.files || []))}
+                        className="glass p-2 rounded text-white"
+                      />
+                      <Button
+                        onClick={() => selectedCapsule?.sharedCapsuleId && uploadSharedFiles(selectedCapsule.sharedCapsuleId)}
+                        disabled={isUploading || uploadFiles.length === 0}
+                      >
+                        {isUploading ? "Uploading..." : "Upload"}
+                      </Button>
+                    </div>
+                    <p className="text-xs text-cyan-300/60 mt-2">
+                      You can add files here until {new Date(selectedCapsule.lockDate!).toLocaleString()}.
+                    </p>
+                  </div>
+                )}
               </div>
             </DialogContent>
           </Dialog>

@@ -64,16 +64,16 @@ export function HeroSection({ onNavigate }: HeroSectionProps) {
       <motion.div
         initial={{ opacity: 0, x: 20 }}
         animate={{ opacity: 1, x: 0 }}
-        className="absolute inset-y-50 right-0 z-50 pointer-events-none"
+        className="absolute inset-y-0 right-0 z-50"
       >
         {/* container stretches full height; inner button aligned to right end */}
-        <div className="h-full flex items-center justify-end pr-6 pointer-events-auto">
+        <div className="h-full flex items-center justify-end pr-6">
           <div
             role="button"
             tabIndex={0}
             onClick={() => { console.log('Navigate -> planets'); onNavigate('planets'); }}
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onNavigate('planets'); }}}
-            className="glass p-4 rounded-lg neon-purple hover:scale-110 transition-transform cursor-pointer"
+            className="glass p-4 rounded-lg neon-purple hover:scale-110 transition-transform cursor-pointer pointer-events-auto"
           >
             <ChevronRight className="w-8 h-8 text-purple-400" />
             <p className="text-purple-400 mt-2 text-sm">Solar<br/>System</p>

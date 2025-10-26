@@ -243,7 +243,7 @@ router.post(
         files: savedFiles,
         unlockDate: parsedUnlock,
         lockDate: parsedLock,
-        communityCapusule: true,
+        communityCapsule: true,
         sharedCapsuleId: sharedId,
       };
 
@@ -255,6 +255,9 @@ router.post(
         createdBy: creatorId,
         sharedWith: recipientIds, // recipients that can access
       };
+
+      console.log('Community: ', creatorDoc);
+
       const createdForCreator = await Capsule.create(creatorDoc);
       createdIds.push(String(createdForCreator._id));
 
@@ -301,60 +304,58 @@ router.post(
 /**
  * GET /api/capsules  (list metadata - only accessible capsules)
  */
-router.get("/", requireToken, async (req, res) => {
-  try {
-    console.log("Listing all capsules metadata...");
-    console.log(req.query);
+  router.get("/", requireToken, async (req, res) => {
+    try {
+      console.log("Listing all capsules metadata...");
+      console.log(req.query)
 
-    const items = await Capsule.find({ createdBy: req.query.userId })
-      .sort({ createdAt: -1 })
-      .lean();
+      const items = await Capsule.find({createdBy: req.query.userId, communityCapsule: false}).sort({createdAt: -1 }).lean();
 
-    // For each capsule, attach fileUrl to each file using getFilesUrls
-    const itemsWithFileUrls = await Promise.all(
-      items.map(async (item) => {
-        const files = item.files || [];
-        const filesWithUrl = await Promise.all(
-          files.map(async (f) => {
-            try {
-              const url = await axios.get(
-                `http://localhost:8080/api/sas/get-sas`,
-                {
+
+      // For each capsule, attach fileUrl to each file using getFilesUrls
+      const itemsWithFileUrls = await Promise.all(
+        items.map(async (item) => {
+          const files = item.files || [];
+          const filesWithUrl = await Promise.all(
+            files.map(async (f) => {
+              try {
+                const url = await axios.get(`http://localhost:5000/api/sas/get-sas`, {
                   headers: {
                     Authorization: `Bearer ${TOKEN}`,
                   },
                   params: {
                     blobName: f.blobName,
                   },
-                },
-              );
+                });
 
-              return { ...f, fileUrl: url.data.sasUrl };
-            } catch (err) {
-              console.error("Failed to get URL for blob:", f.blobName, err);
-              return { ...f, fileUrl: null };
-            }
-          }),
-        );
-        return { ...item, files: filesWithUrl };
-      }),
-    );
+                return { ...f, fileUrl: url.data.sasUrl };
+              } catch (err) {
+                console.error("Failed to get URL for blob:", f.blobName, err);
+                return { ...f, fileUrl: null };
+              }
+            })
+          );
+          return { ...item, files: filesWithUrl };
+        })
+      );
 
-    res.status(200).json({ data: itemsWithFileUrls });
-  } catch (err) {
-    console.error("List capsules error:", err);
-    res.status(500).json({ error: "Failed to list capsules" });
-  }
-});
+      res.status(200).json({ data: itemsWithFileUrls });
+    } catch (err) {
+      console.error("List capsules error:", err);
+      res.status(500).json({ error: "Failed to list capsules" });
+    }
+  });
+
 
 //community capsule get route
 router.get("/community", requireToken, async (req, res) => {
   try {
     console.log("Listing all capsules metadata...");
-    console.log(req.query);
+    console.log(req.query)
     const userId = req.query.userId;
 
     const items = await Capsule.find({ createdBy: userId })
+    const items = await Capsule.find({ createdBy: userId, communityCapsule: true })
       .sort({ createdAt: -1 })
       .lean();
 
