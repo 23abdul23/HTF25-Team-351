@@ -9,7 +9,7 @@
     "cleanup-db": "node --no-deprecation scripts/cleanup-database.js",
     "init-db": "node --no-deprecation scripts/init-database.js",
     "reset-db": "npm run cleanup-db && npm run init-db",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
     "postinstall": "npm run build --if=present"
   },
   "dependencies": {
@@ -44,4 +44,5 @@
   "license": "MIT",
   "type": "module"
 }
+
 
