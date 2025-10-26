@@ -83,7 +83,6 @@ export function CommunityCapsules({ onBack }: CommunityCapsulesProps) {
           credentials: 'include',
         });
 
-        console.log("Community capsules response:", res);
 
         const body = await res.json().catch(() => null);
         if (!res.ok) throw new Error(body?.error || 'Failed to fetch community capsules');
@@ -111,6 +110,8 @@ export function CommunityCapsules({ onBack }: CommunityCapsulesProps) {
         }));
 
         setCapsules(normalized);
+
+        console.log(data.length)
       } catch (err) {
         console.error('Failed to fetch capsules', err);
       }
@@ -294,8 +295,11 @@ export function CommunityCapsules({ onBack }: CommunityCapsulesProps) {
 
           {/* Orbiting Capsules */}
           {capsules.map((capsule, index) => {
-            const radius = 350;
-            const angleRad = (capsule.angle * Math.PI) / 180;
+            const total = Math.max(1, capsules.length);
+            // evenly distribute angles when more than one capsule
+            const angleDeg = total > 1 ? (index * 360) / total : (capsule.angle || 0);
+            const angleRad = (angleDeg * Math.PI) / 180;
+            const radius = 350; // adjust as needed or compute based on total
             const x = Math.cos(angleRad) * radius;
             const y = Math.sin(angleRad) * radius;
 
@@ -303,11 +307,8 @@ export function CommunityCapsules({ onBack }: CommunityCapsulesProps) {
               <motion.div
                 key={capsule.id}
                 initial={{ opacity: 0, scale: 0 }}
-                animate={{
-                  opacity: 1,
-                  scale: 1,
-                }}
-                transition={{ delay: index * 0.1 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: index * 0.06 }}
                 className="absolute"
                 style={{
                   left: `calc(50% + ${x}px)`,
@@ -316,11 +317,9 @@ export function CommunityCapsules({ onBack }: CommunityCapsulesProps) {
                 }}
               >
                 <motion.div
-                  whileHover={{ scale: 1.1 }}
+                  whileHover={{ scale: 1.05 }}
                   onClick={() => handleCapsuleClick(capsule)}
-                  className={`glass p-4 rounded-xl cursor-pointer ${
-                    capsule.isUnlocked ? 'neon-cyan' : 'neon-purple opacity-60'
-                  }`}
+                  className={`glass p-4 rounded-xl cursor-pointer ${capsule.isUnlocked ? 'neon-cyan' : 'neon-purple opacity-60'}`}
                 >
                   <div className="flex flex-col items-center gap-2 w-32">
                     <Avatar className="w-12 h-12 glass border-2 border-cyan-400/50">
@@ -346,10 +345,7 @@ export function CommunityCapsules({ onBack }: CommunityCapsulesProps) {
                     </div>
 
                     {capsule.isUnlocked && (
-                      <motion.div
-                        animate={{ scale: [1, 1.2, 1] }}
-                        transition={{ duration: 2, repeat: Infinity }}
-                      >
+                      <motion.div animate={{ scale: [1, 1.15, 1] }} transition={{ duration: 2, repeat: Infinity }}>
                         <Zap className="w-4 h-4 text-cyan-400" />
                       </motion.div>
                     )}
@@ -361,7 +357,7 @@ export function CommunityCapsules({ onBack }: CommunityCapsulesProps) {
                   className="absolute top-1/2 left-1/2 h-px bg-gradient-to-r from-transparent via-cyan-400/30 to-transparent"
                   style={{
                     width: `${radius}px`,
-                    transform: `rotate(${capsule.angle + 180}deg)`,
+                    transform: `rotate(${angleDeg + 180}deg)`,
                     transformOrigin: 'left center',
                   }}
                 />
