@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { getToken, getUser } from '../lib/auth';
 
 import axios from 'axios';
+import { get } from 'http';
 
 
 interface Capsule {
@@ -26,6 +27,7 @@ const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
 
 async function api(path: string, init?: RequestInit) {
   const token = getToken();
+  const userId = getUser()?.id;
 
   console.log("Using token:", token);
   const headers = {
@@ -34,11 +36,12 @@ async function api(path: string, init?: RequestInit) {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
 
-  const res = await fetch(`${API_BASE}/api${path}`, {
+  const res = await fetch(`${API_BASE}/api${path}?userId=${userId}`, {
     ...init,
     headers,
     credentials: 'include',
   });
+
 
   let body: any = null;
   try {
@@ -59,7 +62,7 @@ export function CapsuleViewer({ onBack }: CapsuleViewerProps) {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await api('/capsules', { method: 'GET' });
+        const response = await api('/capsules', { method: 'GET'});
         // backend returns { data: [...] } per your routes
         const data = response.data || response;
         console.log("Fetched capsules data:", data);
@@ -222,7 +225,7 @@ export function CapsuleViewer({ onBack }: CapsuleViewerProps) {
                 </DialogTitle>
               </DialogHeader>
 
-              <div className="space-y-6 mt-4">
+              <div className="space-y-6 mt-4 h-[75vh]">
                 {/* Memo */}
                 <div className="glass p-4 rounded-lg">
                   <h4 className="text-cyan-400 mb-2 flex items-center gap-2">
@@ -237,15 +240,37 @@ export function CapsuleViewer({ onBack }: CapsuleViewerProps) {
                   <h4 className="text-cyan-400 mb-3 flex items-center gap-2">
                     Attached Files ({selectedCapsule.files.length})
                   </h4>
-                  <div className="space-y-2">
-                    {selectedCapsule.files.map((file, i) => (
-                      <div key={i} className="glass p-3 rounded flex items-center gap-3">
-                        {file.type === 'image' && <Image className="w-5 h-5 text-cyan-400" />}<img src={file.fileUrl} alt={file.name} className="w-13 h-13" />
-                        {file.type === 'video' && <Film className="w-5 h-5 text-purple-400" />}
-                        {file.type === 'document' && <FileText className="w-5 h-5 text-blue-400" />}
-                        <span className="text-cyan-100">{file.name}</span>
-                      </div>
-                    ))}
+
+                  {/* scrollable two-column responsive grid */}
+                  <div className="max-h-72 overflow-y-auto">
+                    <div className="grid grid-cols-2 sm:grid-cols-2 gap-3 p-1">
+                      {selectedCapsule.files.map((file, i) => (
+                        <div key={i} className="glass p-2 rounded-lg flex flex-col items-center">
+                          {file.contentType.slice(0, 5) === 'image' ? (
+                            <img
+                              src={file.fileUrl || ''}
+                              alt={file.name}
+                              className="w-full h-30 object-cover rounded-md mb-2"
+                              loading="lazy"
+                            />
+                          ) : file.contentType.slice(0, 5) === 'video' ? (
+                            <video
+                              src={file.fileUrl || ''}
+                              className="w-full h-40 rounded-md mb-2 bg-black"
+                              controls
+                            />
+                          ) : (
+                            <div className="w-full h-40 rounded-md mb-2 flex items-center justify-center bg-white/5">
+                              <FileText className="w-6 h-6 text-blue-400" />
+                            </div>
+                          )}
+
+                          <div className="text-xs text-cyan-100 truncate w-full text-center">
+                            {file.name}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
