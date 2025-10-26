@@ -2,11 +2,15 @@ import { motion } from 'motion/react';
 import { Rocket, Clock, Lock, Unlock, ChevronLeft, ChevronRight, LogOut } from 'lucide-react';
 import { Button } from './ui/button';
 
+
 interface HeroSectionProps {
   onNavigate: (page: string) => void;
 }
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
+const API_BASE = import.meta.env.VITE_HOSTED_BACKEND_URL || 'http://localhost:5000';
+
+console.log('Using API_BASE:', API_BASE);
+
 
 async function api(path: string, init?: RequestInit) {
   const res = await fetch(`${API_BASE}/api${path}`, {

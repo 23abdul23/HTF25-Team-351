@@ -46,7 +46,7 @@ npm run dev
 Optionally create `client/.env` with:
 
 ```
-VITE_API_BASE=http://localhost:4000
+VITE_HOSTED_BACKEND_URL=http://localhost:4000
 ```
 
 ## API summary

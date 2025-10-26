@@ -9,7 +9,7 @@ import { FriendsPlanets } from './components/FriendsPlanets';
 
 type Page = 'auth' | 'home' | 'create' | 'viewer' | 'community' | 'planets';
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
+const API_BASE = import.meta.env.VITE_HOSTED_BACKEND_URL || 'http://localhost:5000';
 
 export default function App() {
   const [currentPage, setCurrentPage] = useState<Page>('auth');
