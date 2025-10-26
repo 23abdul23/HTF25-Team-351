@@ -1,20 +1,44 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Lock, Unlock, Clock, Image, FileText, Film, Trash2, Calendar } from 'lucide-react';
+import { Lock, Unlock, Clock, FileText, Film, Trash2, Calendar, Image as ImageIcon, Download, Monitor as VideoIcon } from 'lucide-react';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { getToken, getUser } from '../lib/auth';
 
-import axios from 'axios';
-import { get } from 'http';
+interface ApiCapsuleFile {
+  originalName?: string;
+  blobName?: string;
+  contentType?: string;
+  fileUrl?: string;
+  signedUrl?: string;
+  url?: string;
+  size?: number;
+}
 
+interface ApiCapsule {
+  _id?: string;
+  id?: string;
+  title?: string;
+  description?: string;
+  unlockDate?: string;
+  createdAt?: string;
+  recipients?: string[];
+  files?: ApiCapsuleFile[];
+}
+
+interface CapsuleFile {
+  id: string;
+  name: string;
+  contentType: string;
+  previewUrl: string;
+}
 
 interface Capsule {
-  id: number;
+  id: string;
   name: string;
   unlockDate: Date;
   isLocked: boolean;
-  files: Array<{ name: string; type: 'image' | 'video' | 'document' }>;
+  files: CapsuleFile[];
   memo: string;
 }
 
@@ -22,51 +46,75 @@ interface CapsuleViewerProps {
   onBack: () => void;
 }
 
-
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
+const importMetaEnv = (import.meta as unknown as { env?: Record<string, string | undefined> }).env;
+const API_BASE = importMetaEnv?.VITE_API_BASE || 'http://localhost:5000';
 
 async function api(path: string, init?: RequestInit) {
   const token = getToken();
   const userId = getUser()?.id;
 
-  console.log("Using token:", token);
   const headers = {
     'Content-Type': 'application/json',
     ...(init?.headers || {}),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
 
-  const res = await fetch(`${API_BASE}/api${path}?userId=${userId}`, {
+  const res = await fetch(`${API_BASE}/api${path}?userId=${userId ?? ''}`, {
     ...init,
     headers,
     credentials: 'include',
   });
 
-
-  let body: any = null;
+  let body: unknown = null;
   try {
     body = await res.json();
   } catch {
     /* ignore parse errors */
   }
 
-  if (!res.ok) throw new Error(body?.error || 'Request failed');
+  if (!res.ok) throw new Error((body as { error?: string })?.error || 'Request failed');
   return body;
 }
 
+function mapCapsule(apiCapsule: ApiCapsule): Capsule {
+  const unlockDateRaw = apiCapsule.unlockDate ?? apiCapsule.createdAt ?? new Date().toISOString();
+  const unlockDate = new Date(unlockDateRaw);
+  const baseId = apiCapsule._id ?? apiCapsule.id ?? `capsule-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  const files: CapsuleFile[] = (apiCapsule.files ?? []).map((file: ApiCapsuleFile, index: number) => {
+    const name = file.originalName || `file-${index + 1}`;
+    const contentType = file.contentType || 'application/octet-stream';
+    const previewUrl = file.fileUrl || file.signedUrl || file.url || '';
+
+    return {
+      id: `${baseId}-file-${index}`,
+      name,
+      contentType,
+      previewUrl,
+    };
+  });
+
+  return {
+    id: baseId,
+    name: apiCapsule.title || 'Untitled Capsule',
+    unlockDate,
+    isLocked: unlockDate.getTime() > Date.now(),
+    files,
+    memo: apiCapsule.description || '',
+  };
+}
+
 export function CapsuleViewer({ onBack }: CapsuleViewerProps) {
-  const savedUser = getUser();
   const [capsules, setCapsules] = useState<Capsule[]>([]);
   const [selectedCapsule, setSelectedCapsule] = useState<Capsule | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await api('/capsules', { method: 'GET'});
-        // backend returns { data: [...] } per your routes
-        const data = response.data || response;
-        console.log("Fetched capsules data:", data);
-        setCapsules(data);
+        const response = await api('/capsules', { method: 'GET' });
+        const data = (response as { data?: ApiCapsule[] })?.data ?? (response as ApiCapsule[]);
+        const normalized = Array.isArray(data) ? data.map(mapCapsule) : [];
+        setCapsules(normalized);
       } catch (err) {
         console.error("Failed to fetch capsules", err);
       }
@@ -75,8 +123,8 @@ export function CapsuleViewer({ onBack }: CapsuleViewerProps) {
     fetchData();
   }, []);
 
-  const handleDelete = (id: number) => {
-    setCapsules(capsules.filter(c => c.id !== id));
+  const handleDelete = (id: string) => {
+    setCapsules((prev) => prev.filter((capsule) => capsule.id !== id));
     setSelectedCapsule(null);
   };
 
@@ -117,7 +165,7 @@ export function CapsuleViewer({ onBack }: CapsuleViewerProps) {
 
         {/* Capsules Grid */}
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {capsules?.map((capsule, index) => (
+              {capsules?.map((capsule, index) => (
             <motion.div
               key={index}
               initial={{ opacity: 0, scale: 0.9 }}
@@ -133,13 +181,13 @@ export function CapsuleViewer({ onBack }: CapsuleViewerProps) {
               {/* Capsule Header */}
               <div className="flex items-start justify-between mb-4">
                 <div className="flex-1">
-                  <h3 className={`mb-2 ${capsule.isLocked ? 'text-purple-300' : 'text-cyan-300'}`}>
+                  <h3 className={`mb-2 line-clamp-1 ${capsule.isLocked ? 'text-purple-300' : 'text-cyan-300'}`}>
                     {capsule.name}
                   </h3>
                   <div className="flex items-center gap-2 text-sm">
                     <Calendar className={`w-4 h-4 ${capsule.isLocked ? 'text-purple-400' : 'text-cyan-400'}`} />
                     <span className={capsule.isLocked ? 'text-purple-300/70' : 'text-cyan-300/70'}>
-                      {capsule.unlockDate}
+                      {capsule.unlockDate.toLocaleString()}
                     </span>
                   </div>
                 </div>
@@ -155,22 +203,38 @@ export function CapsuleViewer({ onBack }: CapsuleViewerProps) {
 
               {/* Capsule Preview */}
               <div className={`glass p-4 rounded-lg mb-4 ${capsule.isLocked ? 'opacity-50' : ''}`}>
-                <div className="flex flex-wrap gap-2 mb-3">
-                  {capsule.files.slice(0, 3).map((file, i) => (
-                    <div key={i} className="glass p-2 rounded flex items-center gap-2">
-                      {file.contentType.slice(0, 5) === 'image'} <img src={file.fileUrl} alt={file.name} className="w-4 h-4" />
-                      {file.contentType.slice(0, 5) === 'video' && <Film className="w-4 h-4 text-purple-400" />}
-                      {file.contentType.slice(0, 9) === 'document' && <FileText className="w-4 h-4 text-blue-400" />}
-                      <span className="text-xs text-white/70">{file.name}</span>
-                    </div>
-                  ))}
-                  {capsule.files.length > 3 && (
-                    <div className="glass p-2 rounded text-xs text-white/50">
-                      +{capsule.files.length - 3} more
+                <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto overflow-x-hidden pr-1">
+                  {capsule.files.slice(0, 6).map((file) => {
+                    const isImage = file.contentType.startsWith('image');
+                    const isVideo = file.contentType.startsWith('video');
+
+                    return (
+                      <div
+                        key={file.id}
+                        className="glass px-2 py-1 rounded flex items-center gap-2 w-full sm:w-auto sm:min-w-[140px] sm:max-w-[180px] max-w-full overflow-hidden"
+                      >
+                        {isImage && file.previewUrl ? (
+                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-cyan-500/10 text-cyan-300 border border-cyan-500/30">
+                            <ImageIcon className="h-4 w-4" />
+                          </div>
+                        ) : isVideo ? (
+                          <Film className="w-4 h-4 text-purple-400" />
+                        ) : (
+                          <FileText className="w-4 h-4 text-blue-400" />
+                        )}
+                        <span className="text-xs text-white/70 truncate flex-1 min-w-0" title={file.name}>
+                          {file.name}
+                        </span>
+                      </div>
+                    );
+                  })}
+                  {capsule.files.length > 6 && (
+                    <div className="glass px-2 py-1 rounded text-xs text-white/60">
+                      +{capsule.files.length - 6} more
                     </div>
                   )}
                 </div>
-                <p className="text-sm text-white/60 line-clamp-2">{capsule.memo}</p>
+                <p className="text-sm text-white/60 line-clamp-2 mt-3">{capsule.memo}</p>
               </div>
 
               {/* Status */}
@@ -217,7 +281,7 @@ export function CapsuleViewer({ onBack }: CapsuleViewerProps) {
       <AnimatePresence>
         {selectedCapsule && !selectedCapsule.isLocked && (
           <Dialog open={!!selectedCapsule} onOpenChange={() => setSelectedCapsule(null)}>
-            <DialogContent className="glass border-cyan-400/50 neon-cyan max-w-3xl">
+            <DialogContent className="glass border-cyan-400/50 neon-cyan max-w-3xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle className="text-2xl text-cyan-400 flex items-center gap-3">
                   <Unlock className="w-8 h-8" />
@@ -225,7 +289,7 @@ export function CapsuleViewer({ onBack }: CapsuleViewerProps) {
                 </DialogTitle>
               </DialogHeader>
 
-              <div className="space-y-6 mt-4 h-[75vh]">
+              <div className="space-y-6 mt-4">
                 {/* Memo */}
                 <div className="glass p-4 rounded-lg">
                   <h4 className="text-cyan-400 mb-2 flex items-center gap-2">
@@ -243,33 +307,86 @@ export function CapsuleViewer({ onBack }: CapsuleViewerProps) {
 
                   {/* scrollable two-column responsive grid */}
                   <div className="max-h-72 overflow-y-auto">
-                    <div className="grid grid-cols-2 sm:grid-cols-2 gap-3 p-1">
-                      {selectedCapsule.files.map((file, i) => (
-                        <div key={i} className="glass p-2 rounded-lg flex flex-col items-center">
-                          {file.contentType.slice(0, 5) === 'image' ? (
-                            <img
-                              src={file.fileUrl || ''}
-                              alt={file.name}
-                              className="w-full h-30 object-cover rounded-md mb-2"
-                              loading="lazy"
-                            />
-                          ) : file.contentType.slice(0, 5) === 'video' ? (
-                            <video
-                              src={file.fileUrl || ''}
-                              className="w-full h-40 rounded-md mb-2 bg-black"
-                              controls
-                            />
-                          ) : (
-                            <div className="w-full h-40 rounded-md mb-2 flex items-center justify-center bg-white/5">
-                              <FileText className="w-6 h-6 text-blue-400" />
-                            </div>
-                          )}
+                    <div className="grid grid-cols-2 gap-3 p-1">
+                      {selectedCapsule.files.map((file) => {
+                        const isImage = file.contentType.startsWith('image');
+                        const isVideo = file.contentType.startsWith('video');
+                        const previewUrl = file.previewUrl;
 
-                          <div className="text-xs text-cyan-100 truncate w-full text-center">
-                            {file.name}
+                        return (
+                          <div
+                            key={file.id}
+                            className="glass p-3 rounded-lg flex flex-col gap-3 overflow-hidden border border-transparent max-h-[18rem]"
+                          >
+                            <p className="text-sm text-cyan-100 truncate" title={file.name}>
+                              {file.name}
+                            </p>
+                            {isImage && previewUrl ? (
+                              <div className="relative w-full mb-2 overflow-hidden rounded-md border border-cyan-500/30 bg-cyan-500/5">
+                                <img
+                                  src={previewUrl}
+                                  alt={file.name}
+                                  className="w-full h-40 object-cover select-none pointer-events-none"
+                                  loading="lazy"
+                                  draggable={false}
+                                  onContextMenu={(event) => event.preventDefault()}
+                                />
+                                <div className="absolute top-3 left-3 inline-flex h-6 w-6 items-center justify-center rounded-md bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                                  <ImageIcon className="h-4 w-4" />
+                                </div>
+                              </div>
+                            ) : isVideo && previewUrl ? (
+                              file.contentType === 'video/x-matroska' ? (
+                                <div className="w-full h-44 rounded-md mb-2 flex items-center justify-center bg-black/60 text-cyan-200 text-sm">
+                                  MKV preview not supported — use Save File
+                                </div>
+                              ) : (
+                                <video
+                                  src={previewUrl}
+                                  className="w-full h-44 rounded-md mb-2 bg-black"
+                                  controls
+                                  controlsList="nodownload noremoteplayback nofullscreen"
+                                  disablePictureInPicture
+                                  onContextMenu={(event) => event.preventDefault()}
+                                />
+                              )
+                            ) : (
+                              <div className="w-full h-40 rounded-md mb-2 flex items-center justify-center bg-white/5">
+                                {isVideo ? (
+                                  <VideoIcon className="w-6 h-6 text-purple-300" />
+                                ) : (
+                                  <FileText className="w-6 h-6 text-blue-400" />
+                                )}
+                              </div>
+                            )}
+
+                            <div className="flex items-center justify-between text-xs text-cyan-200/80">
+                              <span>{file.contentType.split('/')[0]}</span>
+                              <button
+                                type="button"
+                                className="inline-flex items-center gap-1 text-blue-300 hover:text-blue-200"
+                                onClick={() => {
+                                  if (!file.previewUrl) {
+                                    alert('Download not available for this file yet.');
+                                    return;
+                                  }
+                                  const link = document.createElement('a');
+                                  link.href = file.previewUrl;
+                                  link.download = file.name || 'capsule-file';
+                                  link.rel = 'noopener noreferrer';
+                                  link.target = '_self';
+                                  document.body.appendChild(link);
+                                  link.click();
+                                  document.body.removeChild(link);
+                                }}
+                              >
+                                <Download className="h-3 w-3" />
+                                Save File
+                              </button>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
