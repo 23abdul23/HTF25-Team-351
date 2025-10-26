@@ -49,7 +49,9 @@ export function CreateCapsule({ onBack }: CreateCapsuleProps) {
     if (unlockDate) formData.append('unlockDate', unlockDate);
     // Title derived from first filenames if you want; here we send none so server will default
     try {
-      const res = await axios.post(`${API_BASE}/api/capsules/upload`, formData);
+      const res = await axios.post(`${API_BASE}/api/capsules/upload`, formData
+      );
+      
       console.log('Upload response:', res.data);
       return res.data;
     } catch (err: any) {

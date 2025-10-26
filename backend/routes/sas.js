@@ -5,6 +5,8 @@ import { uploadBuffer, getSignedUrl } from "../services/azureBlob.js";
 import { configDotenv } from "dotenv";
 configDotenv();
 
+import { verifyJwt } from "../lib/jwt.js";
+
 import {
   BlobServiceClient,
   StorageSharedKeyCredential,
@@ -22,10 +24,36 @@ const upload = multer({
 
 // Simple token auth middleware
 function requireToken(req, res, next) {
-  const token = req.header("x-api-token") || req.query.token;
-  if (token !== process.env.SINGLE_USER_TOKEN)
-    return res.status(401).json({ error: "Unauthorized" });
-  next();
+  const authHeader = req.get("authorization") || req.get("Authorization") || "";
+  let token;
+
+  if (authHeader && authHeader.toLowerCase().startsWith("bearer ")) {
+    token = authHeader.slice(7).trim();
+
+  } else if (req.cookies && req.cookies.token) {
+    // httpOnly cookie set by server
+    token = req.cookies.token;
+  } else {
+    // legacy/static token header or query param
+    token = req.header("x-api-token") || req.query.token;
+  }
+
+  if (!token) {
+    return res.status(401).json({ error: "Unauthorized: token required" });
+  }
+
+  try {
+    const payload = verifyJwt(token);
+    // JWT should include sub as user id
+    req.userId = payload && payload.sub;
+    if (!req.userId) {
+      return res.status(400).json({ error: "Invalid token payload" });
+    }
+    return next();
+  } catch (err) {
+    console.error("Token verification failed:", err);
+    return res.status(401).json({ error: "Invalid token" });
+  }
 }
 
 // Use the conncectio string
@@ -159,14 +187,16 @@ router.post(
 );
 
 /**
- * POST /api/get-sas
- * Body: { blobName, permissions?, expiresInSeconds? }
+ * POST /api/sas/get-sas
+ * Query: blobName, permissions?, expiresInSeconds?
  */
-router.post("/get-sas", requireToken, express.json(), async (req, res) => {
+router.get("/get-sas", requireToken, async (req, res) => {
   try {
-    const { blobName, permissions = "r", expiresInSeconds = 900 } = req.body;
-    if (!blobName)
-      return res.status(400).json({ error: "blobName is required" });
+    const blobName = req.query.blobName && String(req.query.blobName);
+    const permissions = String(req.query.permissions || "r");
+    const expiresInSeconds = parseInt(String(req.query.expiresInSeconds || "900"), 10);
+
+    if (!blobName) return res.status(400).json({ error: "blobName is required" });
 
     const expiresOn = new Date(Date.now() + expiresInSeconds * 1000);
     const sasToken = generateBlobSASQueryParameters(
@@ -179,7 +209,7 @@ router.post("/get-sas", requireToken, express.json(), async (req, res) => {
       sharedKeyCredential,
     ).toString();
 
-    const sasUrl = `https://${accountName}.blob.core.windows.net/${containerName}/${blobName}?${sasToken}`;
+    const sasUrl = `https://${accountName}.blob.core.windows.net/${containerName}/${encodeURIComponent(blobName)}?${sasToken}`;
     res.json({ sasUrl, expiresOn });
   } catch (err) {
     console.error("Generate SAS error", err);
@@ -229,7 +259,7 @@ router.get("/:id", requireToken, async (req, res) => {
     });
   } catch (err) {
     console.error("Get capsule error", err);
-    res.status(500).json({ error: "Failed to get capsule" });
+    res.status(500).json({ error: "Shit Failed to get capsule" });
   }
 });
 

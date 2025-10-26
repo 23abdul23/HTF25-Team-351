@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Lock, Unlock, Clock, Image, FileText, Film, Trash2, Calendar } from 'lucide-react';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
+import { getToken, getUser } from '../lib/auth';
 
 import axios from 'axios';
 
@@ -24,9 +25,18 @@ interface CapsuleViewerProps {
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
 
 async function api(path: string, init?: RequestInit) {
+  const token = getToken();
+
+  console.log("Using token:", token);
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(init?.headers || {}),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+
   const res = await fetch(`${API_BASE}/api${path}`, {
     ...init,
-    headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
+    headers,
     credentials: 'include',
   });
 
@@ -41,29 +51,25 @@ async function api(path: string, init?: RequestInit) {
   return body;
 }
 
-
 export function CapsuleViewer({ onBack }: CapsuleViewerProps) {
-
+  const savedUser = getUser();
   const [capsules, setCapsules] = useState<Capsule[]>([]);
   const [selectedCapsule, setSelectedCapsule] = useState<Capsule | null>(null);
-  // const [capsules, setCapsules] = useState<Capsule[]>([
-   
-  
+
   useEffect(() => {
-
     const fetchData = async () => {
-    const response = await api('/capsules',
-      {method: 'GET'}
-    );
-    const data = await response.data;
-
-    console.log("Fetched capsules data:", data);
-    setCapsules(data);
-
+      try {
+        const response = await api('/capsules', { method: 'GET' });
+        // backend returns { data: [...] } per your routes
+        const data = response.data || response;
+        console.log("Fetched capsules data:", data);
+        setCapsules(data);
+      } catch (err) {
+        console.error("Failed to fetch capsules", err);
+      }
     };
 
     fetchData();
-
   }, []);
 
   const handleDelete = (id: number) => {
@@ -149,7 +155,7 @@ export function CapsuleViewer({ onBack }: CapsuleViewerProps) {
                 <div className="flex flex-wrap gap-2 mb-3">
                   {capsule.files.slice(0, 3).map((file, i) => (
                     <div key={i} className="glass p-2 rounded flex items-center gap-2">
-                      {file.contentType.slice(0, 5) === 'image' && <Image className="w-4 h-4 text-cyan-400" />} <img src={file.fileUrl} alt={file.name} className="w-4 h-4" />
+                      {file.contentType.slice(0, 5) === 'image'} <img src={file.fileUrl} alt={file.name} className="w-4 h-4" />
                       {file.contentType.slice(0, 5) === 'video' && <Film className="w-4 h-4 text-purple-400" />}
                       {file.contentType.slice(0, 9) === 'document' && <FileText className="w-4 h-4 text-blue-400" />}
                       <span className="text-xs text-white/70">{file.name}</span>
@@ -229,13 +235,12 @@ export function CapsuleViewer({ onBack }: CapsuleViewerProps) {
                 {/* Files */}
                 <div className="glass p-4 rounded-lg">
                   <h4 className="text-cyan-400 mb-3 flex items-center gap-2">
-                    <Image className="w-5 h-5" />
                     Attached Files ({selectedCapsule.files.length})
                   </h4>
                   <div className="space-y-2">
                     {selectedCapsule.files.map((file, i) => (
                       <div key={i} className="glass p-3 rounded flex items-center gap-3">
-                        {file.type === 'image' && <Image className="w-5 h-5 text-cyan-400" />}
+                        {file.type === 'image' && <Image className="w-5 h-5 text-cyan-400" />}<img src={file.fileUrl} alt={file.name} className="w-13 h-13" />
                         {file.type === 'video' && <Film className="w-5 h-5 text-purple-400" />}
                         {file.type === 'document' && <FileText className="w-5 h-5 text-blue-400" />}
                         <span className="text-cyan-100">{file.name}</span>
