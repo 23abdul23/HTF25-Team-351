@@ -61,6 +61,11 @@ router.post("/", requireToken, express.json(), async (req, res) => {
   try {
     const { title, description, unlockDate, recipients, visibility, blobs } =
       req.body;
+
+
+    console.log("Create capsule:", req.body);
+
+    
     if (!Array.isArray(blobs) || blobs.length === 0) {
       return res.status(400).json({ error: "blobs array required" });
     }

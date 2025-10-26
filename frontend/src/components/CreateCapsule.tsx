@@ -17,6 +17,7 @@ const SINGLE_TOKEN = import.meta.env.VITE_SINGLE_USER_TOKEN || '';
 
 export function CreateCapsule({ onBack }: CreateCapsuleProps) {
   // store File objects
+  const [title, setTitle] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [memo, setMemo] = useState('');
   const [unlockDate, setUnlockDate] = useState('');
@@ -59,7 +60,9 @@ export function CreateCapsule({ onBack }: CreateCapsuleProps) {
     const formData = new FormData();
 
 
+    
     files.forEach((f) => formData.append('files', f));
+    if (title) formData.append('title', title);
     if (memo) formData.append('description', memo);
     if (unlockDate) formData.append('unlockDate', unlockDate);
     if (user?.id) formData.append('userId', user.id);
@@ -239,6 +242,22 @@ export function CreateCapsule({ onBack }: CreateCapsuleProps) {
             animate={{ opacity: 1, x: 0 }}
             className="space-y-6"
           >
+
+            {/* Title */}
+            <div className="glass p-6 rounded-2xl neon-purple">
+              <Label htmlFor="memo" className="text-purple-400 mb-3 block">
+                <FileText className="w-5 h-5 inline mr-2" />
+                Title
+              </Label>
+              <Textarea
+                id="title"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Name Your Capsule"
+                className="glass border-purple-400/30 text-purple-100 placeholder:text-purple-400/30 min-h-22"
+              />
+            </div>
+            
             {/* File Upload */}
             <div className="glass p-6 rounded-2xl neon-blue">
               <Label className="text-blue-400 mb-3 block">Upload Files</Label>
