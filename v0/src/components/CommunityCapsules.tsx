@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Users, Clock, Image, Film, FileText, User, Zap } from 'lucide-react';
+import { Users, Clock, Image, Film, FileText, User, Zap, Download } from 'lucide-react';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { Avatar, AvatarFallback } from './ui/avatar';
@@ -111,7 +111,7 @@ export function CommunityCapsules({ onBack }: CommunityCapsulesProps) {
 
         setCapsules(normalized);
 
-        console.log(data.length)
+        console.log(data)
       } catch (err) {
         console.error('Failed to fetch capsules', err);
       }
@@ -402,15 +402,82 @@ export function CommunityCapsules({ onBack }: CommunityCapsulesProps) {
                     <Image className="w-5 h-5" />
                     Shared Files ({selectedCapsule.files.length})
                   </h4>
-                  <div className="space-y-2">
-                    {selectedCapsule.files.map((file, i) => (
-                      <div key={i} className="glass p-3 rounded flex items-center gap-3">
-                        {file.type === 'image' && <Image className="w-5 h-5 text-cyan-400" />}
-                        {file.type === 'video' && <Film className="w-5 h-5 text-purple-400" />}
-                        {file.type === 'document' && <FileText className="w-5 h-5 text-blue-400" />}
-                        <span className="text-cyan-100">{file.name}</span>
-                      </div>
-                    ))}
+
+                  {/* improved file viewer (uses same rendering as CapsuleViewer) */}
+                  <div className="max-h-72 overflow-y-auto">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-1">
+                      {selectedCapsule.files.map((file, i) => {
+                        const previewUrl = file.fileUrl || '';
+                        const isImage = file.type === 'image' || (file as any).contentType?.startsWith?.('image');
+                        const isVideo = file.type === 'video' || (file as any).contentType?.startsWith?.('video');
+
+                        return (
+                          <div key={i} className="glass p-3 rounded-lg flex flex-col gap-3 overflow-hidden border border-transparent max-h-[18rem]">
+                            <p className="text-sm text-cyan-100 truncate" title={file.name}>
+                              {file.name}
+                            </p>
+
+                            {isImage && previewUrl ? (
+                              <div className="relative w-full mb-2 overflow-hidden rounded-md border border-cyan-500/30 bg-cyan-500/5">
+                                <img
+                                  src={previewUrl}
+                                  alt={file.name}
+                                  className="w-full h-40 object-cover select-none pointer-events-none"
+                                  loading="lazy"
+                                  draggable={false}
+                                  onContextMenu={(e) => e.preventDefault()}
+                                />
+                                <div className="absolute top-3 left-3 inline-flex h-6 w-6 items-center justify-center rounded-md bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                                  <Image className="h-4 w-4" />
+                                </div>
+                              </div>
+                            ) : isVideo && previewUrl ? (
+                              <video
+                                src={previewUrl}
+                                className="w-full h-44 rounded-md mb-2 bg-black"
+                                controls
+                                controlsList="nodownload noremoteplayback nofullscreen"
+                                disablePictureInPicture
+                                onContextMenu={(e) => e.preventDefault()}
+                              />
+                            ) : (
+                              <div className="w-full h-40 rounded-md mb-2 flex items-center justify-center bg-white/5">
+                                {isVideo ? (
+                                  <Monitor className="w-6 h-6 text-purple-300" />
+                                ) : (
+                                  <FileText className="w-6 h-6 text-blue-400" />
+                                )}
+                              </div>
+                            )}
+
+                            <div className="flex items-center justify-between text-xs text-cyan-200/80">
+                              <span>{(file as any).contentType?.split?.('/')?.[0] ?? (file.type || 'file')}</span>
+                              <button
+                                type="button"
+                                className="inline-flex items-center gap-1 text-blue-300 hover:text-blue-200"
+                                onClick={() => {
+                                  if (!previewUrl) {
+                                    alert('Download not available for this file yet.');
+                                    return;
+                                  }
+                                  const link = document.createElement('a');
+                                  link.href = previewUrl;
+                                  link.download = file.name || 'shared-file';
+                                  link.rel = 'noopener noreferrer';
+                                  link.target = '_self';
+                                  document.body.appendChild(link);
+                                  link.click();
+                                  document.body.removeChild(link);
+                                }}
+                              >
+                                <Download className="h-3 w-3" />
+                                Save File
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
 
