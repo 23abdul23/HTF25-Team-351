@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { Upload, FileText, Image, Film, Calendar, Clock, X, Rocket, Lock } from 'lucide-react';
 import { Button } from './ui/button';
@@ -23,6 +23,15 @@ export function CreateCapsule({ onBack }: CreateCapsuleProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [isSealing, setIsSealing] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    const now = new Date();
+    // Convert to the format required by datetime-local: "YYYY-MM-DDTHH:MM"
+    const localISOTime = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+      .toISOString()
+      .slice(0, 16);
+    setUnlockDate(localISOTime);
+  }, []);
 
 
   const user = getUser();

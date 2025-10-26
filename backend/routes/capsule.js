@@ -37,7 +37,6 @@ function requireToken(req, res, next) {
 
   TOKEN = token
 
-  console.log(token)
 
   try {
     const payload = verifyJwt(token);
@@ -161,20 +160,18 @@ router.post(
     }
   },
 );
-
-
 //community route 
 router.post(
-  "/community/upload",
+  "/community/create",
   requireToken,
   upload.array("files", 20),
   async (req, res) => {
     try {
-      console.log("community upload body:", req.body);
+      console.log("community create body:", req.body);
 
       // prefer req.userId from requireToken middleware
-      const creatorId = req.userId || req.body.userId;
-      const { title, description, unlockDate, recipients, visibility, user } = req.body;
+      const creatorId = req.body.userId;
+      const { title, description, unlockDate, lockDate, recipients, visibility } = req.body;
 
       if (!req.files || !req.files.length)
         return res.status(400).json({ error: "No files uploaded" });
@@ -186,15 +183,20 @@ router.post(
           : recipients
         : [];
 
-      console.log("Parsed recipient emails:", recipientEmails);
-
-      // find users for these emails
+        
+      // resolve recipient users
       const recipientUsers = recipientEmails.length
-        ? await User.find({ email: { $in: recipientEmails } }).lean()
-        : [];
+      ? await User.find({ email: { $in: recipientEmails } }).lean()
+      : [];
+      
       const recipientIds = recipientUsers.map((u) => String(u._id));
+      
+      console.log("Creator ID:", creatorId);
+      console.log("Parsed recipient emails:", recipientEmails);
+      console.log("Resolved recipient IDs:", recipientIds);
 
-      // fetch creator email for sharedWith entries
+
+        // fetch creator email for sharedWith entries
       const creatorUser = await User.findById(creatorId).lean();
       const creatorEmail = creatorUser?.email || null;
       const idToEmail = new Map(recipientUsers.map((u) => [String(u._id), u.email]));
@@ -216,15 +218,20 @@ router.post(
       // create a single sharedCapsuleId that will be set on all created docs
       const sharedId = new mongoose.Types.ObjectId().toString();
 
-      // Base capsule fields
+      // parse dates
+      const parsedUnlock = unlockDate ? new Date(unlockDate) : null;
+      const parsedLock = lockDate ? new Date(lockDate) : null;
+
+      // Base capsule fields (include lockDate)
       const baseCapsule = {
         title: title || savedFiles.map((s) => s.originalName).join(", "),
         description,
-        sharedWith: recipientEmails,
+        recipients: recipientEmails,
         visibility: visibility || "shared",
         files: savedFiles,
-        unlockDate: unlockDate ? new Date(unlockDate) : new Date(),
-        communityCapsule: true,
+        unlockDate: parsedUnlock,
+        lockDate: parsedLock,
+        communityCapusule: true,
         sharedCapsuleId: sharedId,
       };
 
@@ -240,30 +247,28 @@ router.post(
       createdIds.push(String(createdForCreator._id));
 
       // Create capsules for each recipient user (so capsule appears in their list)
-      for (const recipientId of recipientIds) {
-        if (recipientId === creatorId) continue; // skip creator
+      for (const rid of recipientIds) {
+        if (rid === creatorId) continue; // skip creator if in list
 
-        const recipientEmail = idToEmail.get(recipientId);
-        // sharedWith should include the creator's email plus all other recipient emails
-        // (but not include the current recipient's own email)
+        // const recipientEmail = idToEmail.get(rid);
         const otherRecipientEmails = recipientEmails.filter((e) => e !== recipientEmail);
         const sharedWith = [creatorEmail, ...otherRecipientEmails].filter(Boolean);
 
         const recipientDoc = {
           ...baseCapsule,
-          createdBy: recipientId,
-          sharedWith: sharedWith, // always share with creator
+          createdBy: rid,
+          sharedWith,
         };
-        const createdForRecipient = await Capsule.create(recipientDoc);
-        createdIds.push(String(createdForRecipient._id));
+        const c = await Capsule.create(recipientDoc);
+        createdIds.push(String(c._id));
       }
 
-      console.log("Community capsules created:", createdIds);
+      console.log("Community capsule created, sharedId:", sharedId, "createdIds:", createdIds);
 
-      res.json({ ok: true, ids: createdIds });
+      res.json({ ok: true, sharedCapsuleId: sharedId, createdCapsuleIds: createdIds });
     } catch (err) {
       console.error("Create community capsule error", err);
-      res.status(500).json({ error: "Failed to create community capsule" });
+      res.status(500).json({ error: "Failed to upload community capsule" });
     }
   },
 );
@@ -319,11 +324,13 @@ router.get("/community", requireToken, async (req, res) => {
   try {
     console.log("Listing all capsules metadata...");
     console.log(req.query)
+    const userId = req.query.userId;
 
-    const items = await Capsule.find({ communityCapsule: true })
+    const items = await Capsule.find({ createdBy: userId, communityCapsule: true })
       .sort({ createdAt: -1 })
       .lean();
 
+    console.log(items)
 
     // For each capsule, attach fileUrl to each file using getFilesUrls
     const itemsWithFileUrls = await Promise.all(
@@ -439,5 +446,69 @@ router.delete("/:id", requireToken, async (req, res) => {
     res.status(500).json({ error: "Failed to delete capsule" });
   }
 });
+
+// upload additional files into an existing shared capsule (propagate to all recipients)
+router.post(
+  "/community/upload",
+  requireToken,
+  upload.array("files", 20),
+  async (req, res) => {
+    try {
+      const { sharedCapsuleId, userId } = req.body;
+
+      if (!sharedCapsuleId) {
+        return res.status(400).json({ error: "sharedCapsuleId is required" });
+      }
+
+      // ensure shared capsule exists (use any doc with that sharedCapsuleId)
+      const baseCapsule = await Capsule.findOne({ sharedCapsuleId }).lean();
+      if (!baseCapsule) return res.status(404).json({ error: "Shared capsule not found" });
+
+      // Determine the upload deadline: lockDate has priority, fallback to unlockDate if provided
+      const uploadDeadline = baseCapsule.lockDate ? new Date(baseCapsule.lockDate) : baseCapsule.unlockDate ? new Date(baseCapsule.unlockDate) : null;
+      if (uploadDeadline && new Date() > uploadDeadline) {
+        return res.status(403).json({ error: "Capsule is closed for uploads (past lock date)" });
+      }
+
+      if (!req.files || !req.files.length) {
+        return res.status(400).json({ error: "No files uploaded" });
+      }
+
+      // upload files to storage using the uploader helper
+      const savedFiles = [];
+      for (const f of req.files) {
+        const owner = userId || req.userId || "unknown";
+        const safeName = `${owner}/${Date.now()}_${f.originalname.replace(/\s+/g, "_")}`;
+        const meta = await uploadBuffer(f.buffer, safeName, f.mimetype);
+        savedFiles.push({
+          originalName: f.originalname,
+          blobName: meta.name,
+          contentType: f.mimetype,
+          size: meta.size,
+          url: meta.url || null,
+        });
+      }
+
+      // append these files into every document that shares the same sharedCapsuleId
+      const updateResult = await Capsule.updateMany(
+        { sharedCapsuleId },
+        { $push: { files: { $each: savedFiles } } }
+      );
+
+      console.log("Appended files to shared capsule:", sharedCapsuleId, "savedFiles:", savedFiles.length);
+
+      return res.json({
+        ok: true,
+        sharedCapsuleId,
+        appended: savedFiles.length,
+        modifiedCount: updateResult.modifiedCount ?? updateResult.nModified ?? 0,
+        savedFiles,
+      });
+    } catch (err) {
+      console.error("Community upload error:", err);
+      return res.status(500).json({ error: "Failed to upload files to shared capsule" });
+    }
+  },
+);
 
 export default router;

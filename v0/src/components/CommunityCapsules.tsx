@@ -31,7 +31,20 @@ export function CommunityCapsules({ onBack }: CommunityCapsulesProps) {
   const [showCreate, setShowCreate] = useState(false);
   const [title, setTitle] = useState('');
   const [memo, setMemo] = useState('');
+  
   const [unlockDate, setUnlockDate] = useState('');
+  const [lockDate, setLockDate] = useState('');
+
+  useEffect(() => {
+    const now = new Date();
+    // Convert to the format required by datetime-local: "YYYY-MM-DDTHH:MM"
+    const localISOTime = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+      .toISOString()
+      .slice(0, 16);
+    setUnlockDate(localISOTime);
+    setLockDate(localISOTime);
+  }, []);
+
   const [files, setFiles] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isCreating, setIsCreating] = useState(false);
@@ -66,6 +79,8 @@ export function CommunityCapsules({ onBack }: CommunityCapsulesProps) {
   }
 
   const [capsules, setCapsules] = useState<CommunityCapsule[]>([]);
+  const [uploadFiles, setUploadFiles] = useState<File[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -95,6 +110,8 @@ export function CommunityCapsules({ onBack }: CommunityCapsulesProps) {
           pilotName: c.pilotName || c.creatorName || c.createdByEmail || (c.createdBy && c.createdBy.email) || 'Unknown',
           title: c.title || c.name || '',
           unlockDate: c.unlockDate ? new Date(c.unlockDate) : new Date(),
+          sharedCapsuleId: c.sharedCapsuleId || null,
+          createdBy: c.createdBy || null,
           isUnlocked: c.unlockDate ? new Date(c.unlockDate) <= new Date() : true,
           files: (c.files || []).map((f: any) => ({
             name: f.originalName || f.name || f.blobName || 'file',
@@ -146,12 +163,14 @@ export function CommunityCapsules({ onBack }: CommunityCapsulesProps) {
       const form = new FormData();
       form.append('title', title);
       form.append('description', memo);
+      
       if (unlockDate) form.append('unlockDate', new Date(unlockDate).toISOString());
-      form.append('visibility', 'public'); // community capsules should be public
-      const user = getUser();
+      if (lockDate) form.append('lockDate', new Date(lockDate).toISOString());
 
-      form.append('user', user)
-      if (user?.id) form.append('userId', user.id);
+      form.append('visibility', 'public'); // community capsules should be public
+
+      form.append('user', getUser())
+      form.append('userId', getUser().id);
 
       files.forEach((f) => form.append('files', f));
       // send recipients as JSON array (server will parse)
@@ -161,7 +180,7 @@ export function CommunityCapsules({ onBack }: CommunityCapsulesProps) {
       const headers: Record<string, string> = {};
       if (token) headers['Authorization'] = `Bearer ${token}`;
 
-      const res = await fetch(`${import.meta.env.VITE_API_BASE || 'http://localhost:5000'}/api/capsules/community/upload`, {
+      const res = await fetch(`${import.meta.env.VITE_API_BASE || 'http://localhost:5000'}/api/capsules/community/create`, {
         method: 'POST',
         headers,
         credentials: 'include',
@@ -190,6 +209,87 @@ export function CommunityCapsules({ onBack }: CommunityCapsulesProps) {
       setCreateError(err.message || 'Failed to create capsule');
     } finally {
       setIsCreating(false);
+    }
+  }
+
+  // upload additional files to an existing shared capsule (called from dialog)
+  async function uploadSharedFiles(sharedCapsuleId: string) {
+    if (!uploadFiles.length) return;
+    setIsUploading(true);
+    try {
+      const form = new FormData();
+      uploadFiles.forEach((f) => form.append('files', f));
+      form.append('sharedCapsuleId', sharedCapsuleId);
+      const user = getUser();
+      if (user?.id) form.append('userId', user.id);
+
+      const token = getToken();
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const res = await fetch(`${API_BASE}/api/capsules/community/upload`, {
+        method: 'POST',
+        headers,
+        credentials: 'include',
+        body: form,
+      });
+
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(body?.error || 'Upload failed');
+
+      // merge newly saved files into selectedCapsule and capsules list (optimistic)
+      const added = (body.savedFiles || []).map((f: any) => ({
+        name: f.originalName,
+        type: (f.contentType || '').startsWith('image') ? 'image' : (f.contentType || '').startsWith('video') ? 'video' : 'document',
+        fileUrl: f.url || null,
+      }));
+
+      // update selectedCapsule locally
+      setSelectedCapsule((prev) =>
+        prev ? { ...prev, files: [...prev.files, ...added] } : prev
+      );
+
+      // update capsules list (all items with same sharedCapsuleId) by refetching for simplicity
+      // you can instead update local capsules array, but refetch keeps client state consistent:
+      const refetchRes = await fetch(`${API_BASE}/api/capsules/community?userId=${getUser()?.id}`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        credentials: 'include',
+      });
+
+
+
+      const refetchBody = await refetchRes.json().catch(() => null);
+
+
+      if (refetchRes.ok) {
+        const refData = refetchBody?.data || refetchBody || [];
+        const normalized = (refData || []).map((c: any, idx: number) => ({
+          id: c._id || c.id || idx,
+          pilotName: c.pilotName || c.creatorName || c.createdByEmail || (c.createdBy && c.createdBy.email) || 'Unknown',
+          title: c.title || c.name || '',
+          unlockDate: c.unlockDate ? new Date(c.unlockDate) : new Date(),
+          sharedCapsuleId: c.sharedCapsuleId || null,
+          createdBy: c.createdBy || null,
+          isUnlocked: c.unlockDate ? new Date(c.unlockDate) <= new Date() : true,
+          files: (c.files || []).map((f: any) => ({
+            name: f.originalName || f.name || f.blobName || 'file',
+            type: (f.contentType || '').startsWith('image') ? 'image' : (f.contentType || '').startsWith('video') ? 'video' : 'document',
+            fileUrl: f.fileUrl || f.url || f.sasUrl || null,
+          })),
+          memo: c.description || c.memo || '',
+          angle: c.angle || 0,
+        }));
+        setCapsules(normalized);
+      }
+
+      setUploadFiles([]);
+      (fileInputRef.current as HTMLInputElement | null) && ((fileInputRef.current as HTMLInputElement).value = '');
+    } catch (err: any) {
+      console.error("Upload shared files error", err);
+      setCreateError(err?.message || "Upload failed");
+    } finally {
+      setIsUploading(false);
     }
   }
 
@@ -526,20 +626,29 @@ export function CommunityCapsules({ onBack }: CommunityCapsulesProps) {
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="text-sm text-cyan-300 block mb-1">Unlock Date</label>
                       <input
                         type="datetime-local"
                         value={unlockDate}
                         onChange={(e) => setUnlockDate(e.target.value)}
-                        className="w-full glass p-2 rounded-md"
+                        className="w-full glass p-2 rounded-md text-white"
                       />
                     </div>
                     <div>
-                      <label className="text-sm text-cyan-300 block mb-1">Visibility</label>
-                      <input readOnly value="public" className="w-full glass p-2 rounded-md text-cyan-300" />
+                      <label className="text-sm text-cyan-300 block mb-1">Lock Date (uploads allowed until)</label>
+                      <input
+                        type="datetime-local"
+                        value={lockDate}
+                        onChange={(e) => setLockDate(e.target.value)}
+                        className="w-full glass p-2 rounded-md text-white"
+                      />
                     </div>
+                  </div>
+                  <div className="mt-2">
+                    <label className="text-sm text-cyan-300 block mb-1">Visibility</label>
+                    <input readOnly value="public" className="w-full glass p-2 rounded-md text-white" />
                   </div>
 
                   <div>
