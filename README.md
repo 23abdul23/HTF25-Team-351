@@ -1,6 +1,6 @@
-# LoginV0
+# MemSky
 
-Clean email/password + Google OAuth example using:
+A digital time capsule maker
 
 - Server: Express + TypeScript + MongoDB (Mongoose) + JWT in httpOnly cookies
 - Client: React (Vite + TS)
@@ -49,17 +49,9 @@ Optionally create `client/.env` with:
 VITE_API_BASE=http://localhost:4000
 ```
 
-## API summary
 
-- POST /api/auth/register {email,password,name}
-- POST /api/auth/login {email,password}
-- POST /api/auth/logout
-- GET /api/auth/me (cookie required)
-- GET /api/auth/google -> redirects to Google
-- GET /api/auth/google/callback -> sets cookie and redirects back to client
-
-## Notes
 
 - JWT is stored in an httpOnly cookie named `token`.
 - CORS is configured to allow the Vite dev server.
 - In production, enable HTTPS and set `secure` cookies.
+
