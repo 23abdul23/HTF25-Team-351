@@ -5,6 +5,8 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import { saveAuth } from '../lib/auth';
+
 
 interface AuthPageProps {
   onAuthenticated: () => void;
@@ -45,14 +47,24 @@ export function AuthPage({ onAuthenticated }: AuthPageProps) {
     setError(null);
     setIsLoading(true);
     try {
-      await api('/auth/login', {
+      const body = await api('/auth/login', {
         method: 'POST',
         body: JSON.stringify({ email, password }),
       });
+
+      // backend may return user and optionally token
+      // store whatever is returned (token + user) to localStorage for page-to-page usage
+      const token = body?.token; // if backend returns token in body
+      const user = body?.user || { id: body?.id || body?._id, email: body?.email, name: body?.name, avatarUrl: body?.avatarUrl };
+
+      if (token || user) {
+        saveAuth({ token, user });
+      }
+
       setAccessGranted(true);
       setTimeout(() => {
         onAuthenticated();
-      }, 600);
+      }, 300);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -65,14 +77,22 @@ export function AuthPage({ onAuthenticated }: AuthPageProps) {
     setError(null);
     setIsLoading(true);
     try {
-      await api('/auth/register', {
+      const body = await api('/auth/register', {
         method: 'POST',
         body: JSON.stringify({ email, password, name: pilotName }),
       });
+
+      const token = body?.token;
+      const user = body?.user || { id: body?.id || body?._id, email: body?.email, name: body?.name, avatarUrl: body?.avatarUrl };
+
+      if (token || user) {
+        saveAuth({ token, user });
+      }
+
       setAccessGranted(true);
       setTimeout(() => {
         onAuthenticated();
-      }, 600);
+      }, 300);
     } catch (err: any) {
       setError(err.message);
     } finally {

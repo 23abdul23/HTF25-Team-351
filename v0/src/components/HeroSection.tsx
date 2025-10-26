@@ -1,9 +1,33 @@
 import { motion } from 'motion/react';
-import { Rocket, Clock, Lock, Unlock, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Rocket, Clock, Lock, Unlock, ChevronLeft, ChevronRight, LogOut } from 'lucide-react';
 import { Button } from './ui/button';
 
 interface HeroSectionProps {
   onNavigate: (page: string) => void;
+}
+
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
+
+async function api(path: string, init?: RequestInit) {
+  const res = await fetch(`${API_BASE}/api${path}`, {
+    ...init,
+    headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
+    credentials: 'include',
+  });
+
+  let body: any = null;
+  try {
+    body = await res.json();
+  } catch {
+    /* ignore parse errors */
+  }
+
+  if (!res.ok) throw new Error(body?.error || 'Request failed');
+  return body;
+}
+
+const logout = async () => {
+  await api('/auth/logout', { method: 'POST' });
 }
 
 export function HeroSection({ onNavigate }: HeroSectionProps) {
@@ -18,6 +42,7 @@ export function HeroSection({ onNavigate }: HeroSectionProps) {
 
   return (
     <div className="min-h-screen relative overflow-hidden">
+
       {/* Navigation hints */}
       <motion.div
         initial={{ opacity: 0, x: -20 }}
@@ -44,7 +69,7 @@ export function HeroSection({ onNavigate }: HeroSectionProps) {
       </motion.div>
 
       {/* Floating capsules background */}
-      <div className="absolute inset-0">
+      {/* <div className="absolute inset-0 pointer-events-none"> 
         {floatingCapsules.map((capsule) => (
           <motion.div
             key={capsule.id}
@@ -62,6 +87,9 @@ export function HeroSection({ onNavigate }: HeroSectionProps) {
             }}
             className="absolute"
             style={{ left: `${capsule.x}%`, top: `${capsule.y}%` }}
+            // allow interactive capsule elements only (if you want them clickable)
+            // otherwise they will remain non-interactive due to parent pointer-events-none
+            // if you need a capsule clickable, add style={{ pointerEvents: 'auto' }} here
           >
             <div className={`glass p-6 rounded-xl ${capsule.locked ? 'neon-purple' : 'neon-cyan'} cursor-pointer hover:scale-110 transition-transform`}>
               {capsule.locked ? (
@@ -78,9 +106,28 @@ export function HeroSection({ onNavigate }: HeroSectionProps) {
             </div>
           </motion.div>
         ))}
-      </div>
+      </div> */}
 
       {/* Main content */}
+      {/* Top-right logout button */}
+      <div className="absolute right-6 top-6 z-50 pointer-events-auto"> {/* ensure it's above background and receives clicks */}
+        <Button
+          onClick={async () => {
+            try {
+              await logout();
+            } catch (err) {
+              console.error('Logout error', err);
+            } finally {
+              onNavigate('auth');
+            }
+          }}
+          variant="ghost"
+          className="glass neon-cyan px-4 py-2 flex items-center gap-2 border border-cyan-400/20 hover:scale-105 transition-transform pointer-events-auto"
+        >
+          <LogOut className="w-5 h-5 text-cyan-300" />
+          <span className="text-sm text-white-200">Log out</span>
+        </Button>
+      </div>
       <div className="relative z-20 min-h-screen flex items-center justify-center px-4">
         <div className="max-w-4xl mx-auto text-center">
           <motion.div

@@ -26,9 +26,9 @@ router.post('/register', async (req, res) => {
 
     const passwordHash = await bcrypt.hash(password, 10);
     const user = await User.create({ email: String(email).toLowerCase(), passwordHash, name });
-    const token = signJwt(user.id ?? user._id);
+    const token = signJwt({ id: user._id, email: user.email });
     setAuthCookie(res, token);
-    res.json({ id: user.id ?? user._id, email: user.email, name: user.name });
+    res.json({ id: user._id, email: user.email, name: user.name });
   } catch (err) {
     console.error('Register error:', err);
     res.status(500).json({ error: 'internal server error' });
@@ -48,7 +48,7 @@ router.post('/login', async (req, res) => {
 
     const token = signJwt(user.id ?? user._id);
     setAuthCookie(res, token);
-    res.json({ id: user.id ?? user._id, email: user.email, name: user.name });
+    res.json({ id: user.id ?? user._id, email: user.email, name: user.name , token : token});
   } catch (err) {
     console.error('Login error:', err);
     res.status(500).json({ error: 'internal server error' });

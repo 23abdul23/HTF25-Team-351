@@ -2,6 +2,8 @@ import express from "express";
 import multer from "multer";
 import Capsule from "../models/Capsule.js";
 import { uploadBuffer, getSignedUrl, getFilesUrls } from "../services/azureBlob.js";
+import { verifyJwt } from "../lib/jwt.js";
+import axios from "axios";
 
 const router = express.Router();
 const upload = multer({
@@ -9,20 +11,43 @@ const upload = multer({
   limits: { fileSize: 200 * 1024 * 1024 },
 });
 
-// Enhanced token middleware that extracts userId
+let TOKEN = ""
+// Enhanced token middleware that extracts userId from Bearer JWT or cookie / fallback token
 function requireToken(req, res, next) {
-  const token = req.header("x-api-token") || req.query.token;
-  if (token !== process.env.SINGLE_USER_TOKEN) {
-    return res.status(401).json({ error: "Unauthorized" });
+  // Try Bearer token first
+  const authHeader = req.get("authorization") || req.get("Authorization") || "";
+  let token;
+
+  if (authHeader && authHeader.toLowerCase().startsWith("bearer ")) {
+    token = authHeader.slice(7).trim();
+
+  } else if (req.cookies && req.cookies.token) {
+    // httpOnly cookie set by server
+    token = req.cookies.token;
+  } else {
+    // legacy/static token header or query param
+    token = req.header("x-api-token") || req.query.token;
   }
 
-  // Extract userId from header or query (you should use JWT or session in production)
-  req.userId = req.header("x-user-id") || req.query.userId;
-  if (!req.userId) {
-    return res.status(400).json({ error: "User ID required" });
+  if (!token) {
+    return res.status(401).json({ error: "Unauthorized: token required" });
   }
 
-  next();
+  TOKEN = token
+
+  try {
+    const payload = verifyJwt(token);
+    // JWT should include sub as user id
+
+    req.userId = payload && payload.sub;
+    if (!req.userId) {
+      return res.status(400).json({ error: "Invalid token payload" });
+    }
+    return next();
+  } catch (err) {
+    console.error("Token verification failed:", err);
+    return res.status(401).json({ error: "Invalid token" });
+  }
 }
 
 /**
@@ -140,6 +165,7 @@ router.get("/", requireToken, async (req, res) => {
     console.log("Listing all capsules metadata...");
     const items = await Capsule.find().sort({ createdAt: -1 }).lean();
 
+
     // For each capsule, attach fileUrl to each file using getFilesUrls
     const itemsWithFileUrls = await Promise.all(
       items.map(async (item) => {
@@ -147,8 +173,16 @@ router.get("/", requireToken, async (req, res) => {
         const filesWithUrl = await Promise.all(
           files.map(async (f) => {
             try {
-              const url = await getFilesUrls(f.blobName);
-              return { ...f, fileUrl: url };
+              const url = await axios.get(`http://localhost:5000/api/sas/get-sas`, {
+                headers: {
+                  Authorization: `Bearer ${TOKEN}`,
+                },
+                params: {
+                  blobName: f.blobName,
+                },
+              });
+
+              return { ...f, fileUrl: url.data.sasUrl };
             } catch (err) {
               console.error("Failed to get URL for blob:", f.blobName, err);
               return { ...f, fileUrl: null };

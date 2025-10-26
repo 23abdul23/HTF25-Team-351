@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { StarfieldBackground } from './components/StarfieldBackground';
 import { HeroSection } from './components/HeroSection';
 import { AuthPage } from './components/AuthPage';
@@ -9,9 +9,37 @@ import { FriendsPlanets } from './components/FriendsPlanets';
 
 type Page = 'auth' | 'home' | 'create' | 'viewer' | 'community' | 'planets';
 
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
+
 export default function App() {
   const [currentPage, setCurrentPage] = useState<Page>('auth');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  // check session on load
+  useEffect(() => {
+    let mounted = true;
+    async function checkSession() {
+      try {
+        const res = await fetch(`${API_BASE}/api/auth/me`, {
+          method: 'GET',
+          credentials: 'include', // critical to send cookie
+        });
+        if (!mounted) return;
+        if (res.ok) {
+          setIsAuthenticated(true);
+        } else {
+          setIsAuthenticated(false);
+        }
+      } catch (err) {
+        if (!mounted) return;
+        setIsAuthenticated(false);
+      }
+    }
+    checkSession();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const handleAuthenticated = () => {
     setIsAuthenticated(true);
