@@ -115,6 +115,9 @@ export function CapsuleViewer({ onBack }: CapsuleViewerProps) {
         const data = (response as { data?: ApiCapsule[] })?.data ?? (response as ApiCapsule[]);
         const normalized = Array.isArray(data) ? data.map(mapCapsule) : [];
         setCapsules(normalized);
+
+        console.log('Fetched capsules:', normalized);
+
       } catch (err) {
         console.error("Failed to fetch capsules", err);
       }
@@ -131,16 +134,17 @@ export function CapsuleViewer({ onBack }: CapsuleViewerProps) {
   const getTimeUntilUnlock = (date: Date) => {
     const now = new Date();
     const diff = date.getTime() - now.getTime();
-    
+
     if (diff < 0) return 'Unlocked';
-    
+
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
     const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    
+
     if (days > 0) return `${days}d ${hours}h`;
     return `${hours}h`;
   };
 
+  console.log('Rendering CapsuleViewer with capsules:', capsules);
   return (
     <div className="min-h-screen px-4 py-8">
       <div className="max-w-7xl mx-auto">
@@ -165,24 +169,23 @@ export function CapsuleViewer({ onBack }: CapsuleViewerProps) {
 
         {/* Capsules Grid */}
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {capsules?.map((capsule, index) => (
+          {capsules?.map((capsule, index) => (
             <motion.div
               key={index}
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: index * 0.1 }}
               onClick={() => !capsule.isLocked && setSelectedCapsule(capsule)}
-              className={`glass p-6 rounded-2xl cursor-pointer transition-all ${
-                capsule.isLocked 
-                  ? 'neon-purple hover:scale-105' 
+              className={`glass p-6 rounded-2xl cursor-pointer transition-all ${capsule.isLocked
+                  ? 'neon-purple hover:scale-105'
                   : 'neon-cyan hover:scale-105'
-              }`}
+                }`}
             >
               {/* Capsule Header */}
               <div className="flex items-start justify-between mb-4">
                 <div className="flex-1">
                   <h3 className={`mb-2 line-clamp-1 ${capsule.isLocked ? 'text-purple-300' : 'text-cyan-300'}`}>
-                    {capsule.name}
+                    Capsule: {capsule.name}
                   </h3>
                   <div className="flex items-center gap-2 text-sm">
                     <Calendar className={`w-4 h-4 ${capsule.isLocked ? 'text-purple-400' : 'text-cyan-400'}`} />
@@ -191,7 +194,7 @@ export function CapsuleViewer({ onBack }: CapsuleViewerProps) {
                     </span>
                   </div>
                 </div>
-                
+
                 <div className={`p-3 glass rounded-lg ${capsule.isLocked ? 'neon-purple' : 'neon-cyan'}`}>
                   {capsule.isLocked ? (
                     <Lock className="w-6 h-6 text-purple-400 animate-pulse-glow" />
