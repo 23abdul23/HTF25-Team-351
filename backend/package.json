@@ -10,6 +10,7 @@
     "init-db": "node --no-deprecation scripts/init-database.js",
     "reset-db": "npm run cleanup-db && npm run init-db",
     "test": "echo \"Error: no test specified\" && exit 1"
+    "postinstall": "npm run build --if=present"
   },
   "dependencies": {
     "@azure/storage-blob": "^12.29.1",
@@ -43,3 +44,4 @@
   "license": "MIT",
   "type": "module"
 }
+
