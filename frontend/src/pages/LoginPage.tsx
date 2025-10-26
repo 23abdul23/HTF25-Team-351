@@ -2,73 +2,79 @@ import React, { useEffect, useState } from 'react'
 import '../App.css'
 const API_BASE = import.meta.env.VITE_HOSTED_BACKEND_URL || 'http://localhost:5000'
 
-type User = { id: string; email: string; name?: string; avatarUrl?: string }
+type User = { id: string; email: string; name?: string; avatarUrl?: string };
 
 async function api(path: string, init?: RequestInit) {
   const res = await fetch(`${API_BASE}/api${path}`, {
     ...init,
-    headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
-    credentials: 'include',
-  })
+    headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
+    credentials: "include",
+  });
 
   // safe JSON parse
-  let body: any = null
+  let body: any = null;
   try {
-    body = await res.json()
+    body = await res.json();
   } catch {
     /* ignore parse errors */
   }
 
-  if (!res.ok) throw new Error(body?.error || 'Request failed')
-  return body
+  if (!res.ok) throw new Error(body?.error || "Request failed");
+  return body;
 }
 
 export function LoginPage() {
-  const [user, setUser] = useState<User | null>(null)
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [name, setName] = useState('')
-  const [error, setError] = useState<string | null>(null)
+  const [user, setUser] = useState<User | null>(null);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api('/auth/me')
+    api("/auth/me")
       .then(setUser)
-      .catch(() => setUser(null))
-  }, [])
+      .catch(() => setUser(null));
+  }, []);
 
   async function handleRegister(e: React.FormEvent) {
-    e.preventDefault()
-    setError(null)
+    e.preventDefault();
+    setError(null);
     try {
-      const u = await api('/auth/register', { method: 'POST', body: JSON.stringify({ email, password, name }) })
-      setUser(u)
+      const u = await api("/auth/register", {
+        method: "POST",
+        body: JSON.stringify({ email, password, name }),
+      });
+      setUser(u);
     } catch (err: any) {
-      setError(err.message)
+      setError(err.message);
     }
   }
 
   async function handleLogin(e: React.FormEvent) {
-    e.preventDefault()
-    setError(null)
+    e.preventDefault();
+    setError(null);
     try {
-      const u = await api('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) })
-      setUser(u)
+      const u = await api("/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ email, password }),
+      });
+      setUser(u);
     } catch (err: any) {
-      setError(err.message)
+      setError(err.message);
     }
   }
 
   async function handleLogout() {
     try {
-      await api('/auth/logout', { method: 'POST' })
+      await api("/auth/logout", { method: "POST" });
     } catch {
       // ignore
     }
-    setUser(null)
+    setUser(null);
   }
 
   function handleGoogle() {
-    window.location.href = `${API_BASE}/api/auth/google`
+    window.location.href = `${API_BASE}/api/auth/google`;
   }
 
   return (
@@ -87,7 +93,7 @@ export function LoginPage() {
                 src={user.avatarUrl}
                 alt="profile"
                 onError={(e) => {
-                  (e.currentTarget as HTMLImageElement).style.display = 'none'
+                  (e.currentTarget as HTMLImageElement).style.display = "none";
                 }}
               />
             )}
@@ -100,7 +106,9 @@ export function LoginPage() {
             <div>
               <p className="eyebrow">Mission Control</p>
               <h1 className="headline">Sign in to the Galaxy</h1>
-              <p className="copy">Authenticate with email or warp in using Google.</p>
+              <p className="copy">
+                Authenticate with email or warp in using Google.
+              </p>
             </div>
 
             {error && <p className="error">{error}</p>}
@@ -108,21 +116,38 @@ export function LoginPage() {
             <form className="form" onSubmit={handleLogin}>
               <label className="field">
                 <span>Email</span>
-                <input placeholder="astro@ship.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+                <input
+                  placeholder="astro@ship.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
               </label>
               <label className="field">
                 <span>Password</span>
-                <input placeholder="••••••••" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+                <input
+                  placeholder="••••••••"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
               </label>
               <label className="field">
                 <span>Call sign (optional)</span>
-                <input placeholder="Nova" value={name} onChange={(e) => setName(e.target.value)} />
+                <input
+                  placeholder="Nova"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
               </label>
               <div className="actions">
                 <button className="primary" type="submit">
                   Login
                 </button>
-                <button className="ghost" type="button" onClick={handleRegister}>
+                <button
+                  className="ghost"
+                  type="button"
+                  onClick={handleRegister}
+                >
                   Register
                 </button>
               </div>
@@ -139,7 +164,7 @@ export function LoginPage() {
         )}
       </main>
     </div>
-  )
+  );
 }
 
-export default LoginPage
+export default LoginPage;

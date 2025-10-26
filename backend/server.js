@@ -3,11 +3,11 @@ import mongoose from "mongoose";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import { configDotenv } from "dotenv";
-
 import authRoutes from "./routes/auth.js";
 import capsuleRoutes from "./routes/capsule.js";
 import sasRoutes from "./routes/sas.js";
 import profileRoutes from "./routes/profile.js";
+
 configDotenv();
 
 const app = express();
@@ -24,6 +24,7 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps or Postman)
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
@@ -37,7 +38,8 @@ app.use(
   }),
 );
 
-app.options("*", cors()); //handle preflight
+app.options("*", cors()); // handle preflight
+
 app.use(cookieParser());
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
@@ -46,7 +48,7 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use("/api/auth", authRoutes);
 app.use("/api/capsules", capsuleRoutes);
 app.use("/api/sas", sasRoutes);
-app.use("/api/profile",profileRoutes);
+app.use("/api/profile", profileRoutes);
 
 // Health check endpoint
 app.get("/api/health", (req, res) => {
@@ -54,29 +56,34 @@ app.get("/api/health", (req, res) => {
     status: "OK",
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || "development",
+    mongodb:
+      mongoose.connection.readyState === 1 ? "connected" : "disconnected",
   });
 });
 
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error("Error:", err);
+app.use((req, res) => {
+  res.status(404).json({ error: "Route not found" });
 });
 
-// MongoDB connection with better error handling
+app.use((err, req, res, next) => {
+  console.error("Error:", err);
+  res.status(err.status || 500).json({
+    error: err.message || "Internal server error",
+    ...(process.env.NODE_ENV === "development" && { stack: err.stack }),
+  });
+});
+
+const MONGODB_URI =
+  process.env.MONGODB_URI_C || "mongodb://localhost:27017/CBIT_local";
+
 mongoose
-  .connect(
-    process.env.MONGODB_URI_C || "mongodb://localhost:27017/CBIT_local",
-    {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    },
-  )
+  .connect(MONGODB_URI)
   .then(() => {
-    console.log("Mongodb connected");
+    console.log("✅ MongoDB connected");
     console.log(`Database: ${mongoose.connection.name}`);
   })
   .catch((err) => {
-    console.error("Mongodb error:", err);
+    console.error("❌ MongoDB connection error:", err);
     process.exit(1);
   });
 
@@ -86,13 +93,28 @@ mongoose.connection.on("error", (err) => {
 });
 
 mongoose.connection.on("disconnected", () => {
-  console.log("MongoDB disconnected");
+  console.warn("⚠️ MongoDB disconnected");
+});
+
+// Graceful shutdown
+process.on("SIGTERM", () => {
+  console.log("SIGTERM received, closing server gracefully");
+  mongoose.connection.close(() => {
+    console.log("MongoDB connection closed");
+    process.exit(0);
+  });
 });
 
 const PORT = process.env.PORT || 5000;
+const server = app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Server running on port ${PORT}`);
+  console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
+});
 
-app.listen(PORT, () => {
-  console.log(`server running on port ${PORT}`);
+// Handle server errors
+server.on("error", (err) => {
+  console.error("Server error:", err);
+  process.exit(1);
 });
 
 // Simple proxy endpoints to avoid CORS when calling third-party API (memsky)

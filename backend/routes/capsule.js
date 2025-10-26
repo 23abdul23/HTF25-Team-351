@@ -3,7 +3,11 @@ import multer from "multer";
 import Capsule from "../models/Capsule.js";
 import User from "../models/User.js";
 import mongoose from "mongoose";
-import { uploadBuffer, getSignedUrl, getFilesUrls } from "../services/azureBlob.js";
+import {
+  uploadBuffer,
+  getSignedUrl,
+  getFilesUrls,
+} from "../services/azureBlob.js";
 import { verifyJwt } from "../lib/jwt.js";
 import axios from "axios";
 
@@ -13,7 +17,7 @@ const upload = multer({
   limits: { fileSize: 200 * 1024 * 1024 },
 });
 
-let TOKEN = ""
+let TOKEN = "";
 // Enhanced token middleware that extracts userId from Bearer JWT or cookie / fallback token
 function requireToken(req, res, next) {
   // Try Bearer token first
@@ -22,7 +26,6 @@ function requireToken(req, res, next) {
 
   if (authHeader && authHeader.toLowerCase().startsWith("bearer ")) {
     token = authHeader.slice(7).trim();
-
   } else if (req.cookies && req.cookies.token) {
     // httpOnly cookie set by server
     token = req.cookies.token;
@@ -35,8 +38,7 @@ function requireToken(req, res, next) {
     return res.status(401).json({ error: "Unauthorized: token required" });
   }
 
-  TOKEN = token
-
+  TOKEN = token;
 
   try {
     const payload = verifyJwt(token);
@@ -62,9 +64,7 @@ router.post("/", requireToken, express.json(), async (req, res) => {
     const { title, description, unlockDate, recipients, visibility, blobs } =
       req.body;
 
-
     console.log("Create capsule:", req.body);
-
 
     if (!Array.isArray(blobs) || blobs.length === 0) {
       return res.status(400).json({ error: "blobs array required" });
@@ -119,7 +119,7 @@ router.post(
   upload.array("files", 20),
   async (req, res) => {
     try {
-      const { title, description, unlockDate, recipients, visibility , userId} =
+      const { title, description, unlockDate, recipients, visibility, userId } =
         req.body;
       if (!req.files || !req.files.length)
         return res.status(400).json({ error: "No files uploaded" });
@@ -148,7 +148,7 @@ router.post(
       const capsule = await Capsule.create({
         title: title || savedFiles.map((s) => s.originalName).join(", "),
         description,
-        userId : userId,
+        userId: userId,
         createdBy: userId,
         recipients: recipientList,
         visibility: visibility || "private",
@@ -165,7 +165,7 @@ router.post(
     }
   },
 );
-//community route 
+//community route
 router.post(
   "/community/create",
   requireToken,
@@ -176,7 +176,14 @@ router.post(
 
       // prefer req.userId from requireToken middleware
       const creatorId = req.body.userId;
-      const { title, description, unlockDate, lockDate, recipients, visibility } = req.body;
+      const {
+        title,
+        description,
+        unlockDate,
+        lockDate,
+        recipients,
+        visibility,
+      } = req.body;
 
       if (!req.files || !req.files.length)
         return res.status(400).json({ error: "No files uploaded" });
@@ -188,23 +195,23 @@ router.post(
           : recipients
         : [];
 
-        
       // resolve recipient users
       const recipientUsers = recipientEmails.length
-      ? await User.find({ email: { $in: recipientEmails } }).lean()
-      : [];
-      
+        ? await User.find({ email: { $in: recipientEmails } }).lean()
+        : [];
+
       const recipientIds = recipientUsers.map((u) => String(u._id));
-      
+
       console.log("Creator ID:", creatorId);
       console.log("Parsed recipient emails:", recipientEmails);
       console.log("Resolved recipient IDs:", recipientIds);
 
-
-        // fetch creator email for sharedWith entries
+      // fetch creator email for sharedWith entries
       const creatorUser = await User.findById(creatorId).lean();
       const creatorEmail = creatorUser?.email || null;
-      const idToEmail = new Map(recipientUsers.map((u) => [String(u._id), u.email]));
+      const idToEmail = new Map(
+        recipientUsers.map((u) => [String(u._id), u.email]),
+      );
 
       // Upload files to storage (use creatorId path)
       const savedFiles = [];
@@ -259,8 +266,12 @@ router.post(
         if (rid === creatorId) continue; // skip creator if in list
 
         const recipientEmail = idToEmail.get(rid);
-        const otherRecipientEmails = recipientEmails.filter((e) => e !== recipientEmail);
-        const sharedWith = [creatorEmail, ...otherRecipientEmails].filter(Boolean);
+        const otherRecipientEmails = recipientEmails.filter(
+          (e) => e !== recipientEmail,
+        );
+        const sharedWith = [creatorEmail, ...otherRecipientEmails].filter(
+          Boolean,
+        );
 
         const recipientDoc = {
           ...baseCapsule,
@@ -271,9 +282,18 @@ router.post(
         createdIds.push(String(c._id));
       }
 
-      console.log("Community capsule created, sharedId:", sharedId, "createdIds:", createdIds);
+      console.log(
+        "Community capsule created, sharedId:",
+        sharedId,
+        "createdIds:",
+        createdIds,
+      );
 
-      res.json({ ok: true, sharedCapsuleId: sharedId, createdCapsuleIds: createdIds });
+      res.json({
+        ok: true,
+        sharedCapsuleId: sharedId,
+        createdCapsuleIds: createdIds,
+      });
     } catch (err) {
       console.error("Create community capsule error", err);
       res.status(500).json({ error: "Failed to upload community capsule" });
@@ -284,62 +304,17 @@ router.post(
 /**
  * GET /api/capsules  (list metadata - only accessible capsules)
  */
-  router.get("/", requireToken, async (req, res) => {
-    try {
-      console.log("Listing all capsules metadata...");
-      console.log(req.query)
-
-      const items = await Capsule.find({createdBy: req.query.userId, communityCapsule: false}).sort({createdAt: -1 }).lean();
-
-
-      // For each capsule, attach fileUrl to each file using getFilesUrls
-      const itemsWithFileUrls = await Promise.all(
-        items.map(async (item) => {
-          const files = item.files || [];
-          const filesWithUrl = await Promise.all(
-            files.map(async (f) => {
-              try {
-                const url = await axios.get(`http://localhost:5000/api/sas/get-sas`, {
-                  headers: {
-                    Authorization: `Bearer ${TOKEN}`,
-                  },
-                  params: {
-                    blobName: f.blobName,
-                  },
-                });
-
-                return { ...f, fileUrl: url.data.sasUrl };
-              } catch (err) {
-                console.error("Failed to get URL for blob:", f.blobName, err);
-                return { ...f, fileUrl: null };
-              }
-            })
-          );
-          return { ...item, files: filesWithUrl };
-        })
-      );
-
-      res.status(200).json({ data: itemsWithFileUrls });
-    } catch (err) {
-      console.error("List capsules error:", err);
-      res.status(500).json({ error: "Failed to list capsules" });
-    }
-  });
-
-
-//community capsule get route
-router.get("/community", requireToken, async (req, res) => {
+router.get("/", requireToken, async (req, res) => {
   try {
     console.log("Listing all capsules metadata...");
-    console.log(req.query)
-    const userId = req.query.userId;
+    console.log(req.query);
 
-    const items = await Capsule.find({ createdBy: userId, communityCapsule: true })
+    const items = await Capsule.find({
+      createdBy: req.query.userId,
+      communityCapsule: false,
+    })
       .sort({ createdAt: -1 })
       .lean();
-
-    
-    console.log("community capsules: ", items)
 
     // For each capsule, attach fileUrl to each file using getFilesUrls
     const itemsWithFileUrls = await Promise.all(
@@ -348,25 +323,27 @@ router.get("/community", requireToken, async (req, res) => {
         const filesWithUrl = await Promise.all(
           files.map(async (f) => {
             try {
-              const url = await axios.get(`http://localhost:5000/api/sas/get-sas`, {
-                headers: {
-                  Authorization: `Bearer ${TOKEN}`,
-
+              const url = await axios.get(
+                `http://localhost:5000/api/sas/get-sas`,
+                {
+                  headers: {
+                    Authorization: `Bearer ${TOKEN}`,
+                  },
+                  params: {
+                    blobName: f.blobName,
+                  },
                 },
-                params: {
-                  blobName: f.blobName,
-                },
-              });
+              );
 
               return { ...f, fileUrl: url.data.sasUrl };
             } catch (err) {
               console.error("Failed to get URL for blob:", f.blobName, err);
               return { ...f, fileUrl: null };
             }
-          })
+          }),
         );
         return { ...item, files: filesWithUrl };
-      })
+      }),
     );
 
     res.status(200).json({ data: itemsWithFileUrls });
@@ -376,6 +353,58 @@ router.get("/community", requireToken, async (req, res) => {
   }
 });
 
+//community capsule get route
+router.get("/community", requireToken, async (req, res) => {
+  try {
+    console.log("Listing all capsules metadata...");
+    console.log(req.query);
+    const userId = req.query.userId;
+
+    const items = await Capsule.find({
+      createdBy: userId,
+      communityCapsule: true,
+    })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    console.log("community capsules: ", items);
+
+    // For each capsule, attach fileUrl to each file using getFilesUrls
+    const itemsWithFileUrls = await Promise.all(
+      items.map(async (item) => {
+        const files = item.files || [];
+        const filesWithUrl = await Promise.all(
+          files.map(async (f) => {
+            try {
+              const url = await axios.get(
+                `http://localhost:8080/api/sas/get-sas`,
+                {
+                  headers: {
+                    Authorization: `Bearer ${TOKEN}`,
+                  },
+                  params: {
+                    blobName: f.blobName,
+                  },
+                },
+              );
+
+              return { ...f, fileUrl: url.data.sasUrl };
+            } catch (err) {
+              console.error("Failed to get URL for blob:", f.blobName, err);
+              return { ...f, fileUrl: null };
+            }
+          }),
+        );
+        return { ...item, files: filesWithUrl };
+      }),
+    );
+
+    res.status(200).json({ data: itemsWithFileUrls });
+  } catch (err) {
+    console.error("List capsules error:", err);
+    res.status(500).json({ error: "Failed to list capsules" });
+  }
+});
 
 /**
  * GET /api/capsules/:id  (get signed URLs if unlocked and user has access)
@@ -471,12 +500,19 @@ router.post(
 
       // ensure shared capsule exists (use any doc with that sharedCapsuleId)
       const baseCapsule = await Capsule.findOne({ sharedCapsuleId }).lean();
-      if (!baseCapsule) return res.status(404).json({ error: "Shared capsule not found" });
+      if (!baseCapsule)
+        return res.status(404).json({ error: "Shared capsule not found" });
 
       // Determine the upload deadline: lockDate has priority, fallback to unlockDate if provided
-      const uploadDeadline = baseCapsule.lockDate ? new Date(baseCapsule.lockDate) : baseCapsule.unlockDate ? new Date(baseCapsule.unlockDate) : null;
+      const uploadDeadline = baseCapsule.lockDate
+        ? new Date(baseCapsule.lockDate)
+        : baseCapsule.unlockDate
+          ? new Date(baseCapsule.unlockDate)
+          : null;
       if (uploadDeadline && new Date() > uploadDeadline) {
-        return res.status(403).json({ error: "Capsule is closed for uploads (past lock date)" });
+        return res
+          .status(403)
+          .json({ error: "Capsule is closed for uploads (past lock date)" });
       }
 
       if (!req.files || !req.files.length) {
@@ -501,21 +537,29 @@ router.post(
       // append these files into every document that shares the same sharedCapsuleId
       const updateResult = await Capsule.updateMany(
         { sharedCapsuleId },
-        { $push: { files: { $each: savedFiles } } }
+        { $push: { files: { $each: savedFiles } } },
       );
 
-      console.log("Appended files to shared capsule:", sharedCapsuleId, "savedFiles:", savedFiles.length);
+      console.log(
+        "Appended files to shared capsule:",
+        sharedCapsuleId,
+        "savedFiles:",
+        savedFiles.length,
+      );
 
       return res.json({
         ok: true,
         sharedCapsuleId,
         appended: savedFiles.length,
-        modifiedCount: updateResult.modifiedCount ?? updateResult.nModified ?? 0,
+        modifiedCount:
+          updateResult.modifiedCount ?? updateResult.nModified ?? 0,
         savedFiles,
       });
     } catch (err) {
       console.error("Community upload error:", err);
-      return res.status(500).json({ error: "Failed to upload files to shared capsule" });
+      return res
+        .status(500)
+        .json({ error: "Failed to upload files to shared capsule" });
     }
   },
 );

@@ -1,15 +1,15 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  User, 
-  Mail, 
-  Calendar, 
-  MapPin, 
-  Edit3, 
-  Settings, 
-  Camera, 
-  Shield, 
-  Activity, 
+import {
+  User,
+  Mail,
+  Calendar,
+  MapPin,
+  Edit3,
+  Settings,
+  Camera,
+  Shield,
+  Activity,
   Award,
   Clock,
   Heart,
@@ -21,9 +21,9 @@ import {
   Save,
   X
 } from 'lucide-react';
-import { Button } from './ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
-import { getToken, getUser } from '../lib/auth';
+import { Button } from './ui/button.tsx';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog.tsx';
+import { getToken, getUser } from '../lib/auth.ts';
 
 interface UserProfile {
   id: number;
@@ -148,7 +148,7 @@ export function UserProfile({ onBack }: UserProfileProps) {
           <div className="glass rounded-2xl overflow-hidden h-64 relative">
 
             <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
-            
+
             {/* Avatar */}
             <div className="absolute bottom-4 left-6 flex items-end gap-4">
               <div className="relative">
@@ -180,7 +180,7 @@ export function UserProfile({ onBack }: UserProfileProps) {
               className="grid lg:grid-cols-3 gap-6"
             >
 
-              </div>
+            </div>
             </motion.div>
           )}
       </div>

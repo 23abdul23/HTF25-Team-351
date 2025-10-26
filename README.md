@@ -1,7 +1,8 @@
-# LoginV0
+# MemSky
 
-Clean email/password + Google OAuth example using:
+A digital time capsule maker
 
+Stack:
 - Server: Express + TypeScript + MongoDB (Mongoose) + JWT in httpOnly cookies
 - Client: React (Vite + TS)
 
@@ -13,32 +14,27 @@ Clean email/password + Google OAuth example using:
 ## Setup
 
 1. Server env
-   Copy `server/.env.example` to `server/.env` and fill values (you can skip Google for now to test email login).
+   Copy `server/.env.example` to `server/.env` and fill required values. 
+   For connecting to your own mongo server, replace MONGODB_URI_C with MONGODB_URI and set your link as MONGODB_URI in the .env.
+   
+2. Get dependencies
+     Run `npm install` in the frontend and backend folders.
 
-2. Install deps
-
-```powershell
-# from repo root
-cd server
-npm i
-cd ..\client
-npm i
-```
 
 3. Run dev
    Open two terminals.
 
 ```powershell
 # Terminal 1
-cd server
-npm run dev
+cd backend
+nodemon server.js
 
 # Terminal 2
-cd client
+cd frontend
 npm run dev
 ```
 
-- Server: http://localhost:4000
+- Server: http://localhost:3000
 - Client: http://localhost:5173
 
 ## Client config
@@ -60,6 +56,4 @@ VITE_HOSTED_BACKEND_URL=http://localhost:4000
 
 ## Notes
 
-- JWT is stored in an httpOnly cookie named `token`.
-- CORS is configured to allow the Vite dev server.
-- In production, enable HTTPS and set `secure` cookies.
+And the project is up. 
