@@ -527,7 +527,7 @@ export function CommunityCapsules({ onBack }: CommunityCapsulesProps) {
 
                   {/* improved file viewer (uses same rendering as CapsuleViewer) */}
                   <div className="max-h-72 overflow-y-auto">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-1">
+                    <div className="grid grid-cols-2 sm:grid-cols-2 gap-3 p-1">
                       {selectedCapsule.files.map((file, i) => {
                         const previewUrl = file.fileUrl || '';
                         const isImage = file.type === 'image' || (file as any).contentType?.startsWith?.('image');
